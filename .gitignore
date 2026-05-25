@@ -1,0 +1,37 @@
+# System/Editor
+.idea/
+.vscode/
+*.swp
+*.log
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.local
+
+# Backend Ignores
+backend/target/
+backend/bin/
+backend/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Frontend Ignores
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.env
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# General Builds
+build/
+dist/
+target/
