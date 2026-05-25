@@ -1,122 +1,197 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
+import { useAuth } from '@hooks/useAuth'
+import { useUiStore } from '@store/uiStore'
+import { ROUTES } from '@utils/constants'
+import { LoginPage } from '@pages/LoginPage'
+import { RegisterPage } from '@pages/RegisterPage'
+import { ResetPasswordPage } from '@pages/ResetPasswordPage'
+import { CitizenDashboard } from '@pages/CitizenDashboard'
+import { ComplaintForm } from '@pages/ComplaintForm'
+import { ComplaintDetail } from '@pages/ComplaintDetail'
+import { OfficerDashboard } from '@pages/OfficerDashboard'
+import { AdminDashboard } from '@pages/AdminDashboard'
+import AdminDepartments from '@pages/AdminDepartments'
+import AdminOfficers from '@pages/AdminOfficers'
+import AdminWards from '@pages/AdminWards'
+import { LandingPage } from '@pages/LandingPage'
+import { NotificationCenter } from '@pages/NotificationCenter'
 import './App.css'
+import Header from '@components/common/Header'
 
+/**
+ * Root App component with routing setup
+ */
 function App() {
-  const [count, setCount] = useState(0)
+  const { isAuthenticated, user } = useAuth()
+  const { notifications } = useUiStore()
+
+  /**
+   * Protected route wrapper with optional role checking
+   */
+  const ProtectedRoute = ({ children, requiredRole = null }) => {
+    if (!isAuthenticated) {
+      return <Navigate to={ROUTES.LOGIN} replace />
+    }
+
+    if (requiredRole && user?.role !== requiredRole) {
+      return <Navigate to={ROUTES.DASHBOARD} replace />
+    }
+
+    return children
+  }
+
+  /**
+   * Public routes (redirect to dashboard if already logged in)
+   */
+  const PublicRoute = ({ children }) => {
+    if (isAuthenticated) {
+      return <Navigate to={ROUTES.DASHBOARD} replace />
+    }
+    return children
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <Routes>
+          {/* Public Auth Routes */}
+          <Route
+            path={ROUTES.LOGIN}
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path={ROUTES.REGISTER}
+            element={
+              <PublicRoute>
+                <RegisterPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path={ROUTES.RESET_PASSWORD}
+            element={<ResetPasswordPage />}
+          />
 
-      <div className="ticks"></div>
+          {/* Home Route */}
+          <Route path={ROUTES.HOME} element={<LandingPage />} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {/* Dashboard Route (role-based) */}
+          <Route
+            path={ROUTES.DASHBOARD}
+            element={
+              <ProtectedRoute>
+                {user?.role === 'CITIZEN' && <Navigate to={ROUTES.CITIZEN.DASHBOARD} replace />}
+                {user?.role === 'OFFICER' && <Navigate to={ROUTES.OFFICER.DASHBOARD} replace />}
+                {user?.role === 'ADMIN' && <Navigate to={ROUTES.ADMIN.DASHBOARD} replace />}
+              </ProtectedRoute>
+            }
+          />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+          {/* Citizen Routes */}
+          <Route
+            path={ROUTES.CITIZEN.DASHBOARD}
+            element={
+              <ProtectedRoute requiredRole="CITIZEN">
+                <CitizenDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.CITIZEN.SUBMIT_COMPLAINT}
+            element={
+              <ProtectedRoute requiredRole="CITIZEN">
+                <ComplaintForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/citizen/complaints/:id"
+            element={
+              <ProtectedRoute requiredRole="CITIZEN">
+                <ComplaintDetail />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Officer Routes */}
+          <Route
+            path={ROUTES.OFFICER.DASHBOARD}
+            element={
+              <ProtectedRoute requiredRole="OFFICER">
+                <OfficerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/officer/complaints/:id"
+            element={
+              <ProtectedRoute requiredRole="OFFICER">
+                <ComplaintDetail />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Notifications Route */}
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationCenter />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin Routes */}
+          <Route
+            path={ROUTES.ADMIN.DASHBOARD}
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/departments"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AdminDepartments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/officers"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AdminOfficers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/wards"
+            element={
+              <ProtectedRoute requiredRole="ADMIN">
+                <AdminWards />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Fallback */}
+          <Route path="*" element={<div>404 - Page Not Found</div>} />
+        </Routes>
+
+        {/* Toast Notifications */}
+        <Toaster position="top-right" />
+      </div>
+    </Router>
   )
 }
 
 export default App
+

@@ -1,20 +1,39 @@
 package com.civicpulse.service.complaint;
 
-import com.civicpulse.model.dto.request.ComplaintRequestDto;
 import com.civicpulse.model.dto.response.ComplaintResponseDto;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.web.multipart.MultipartFile;
+import com.civicpulse.service.complaint.contract.ComplaintSubmissionService;
+import com.civicpulse.service.complaint.contract.ComplaintRetrievalService;
+import com.civicpulse.service.complaint.contract.ComplaintStatusService;
 
-import java.util.List;
-
-public interface ComplaintService {
-    ComplaintResponseDto submitComplaint(ComplaintRequestDto dto, List<MultipartFile> images, String userEmail);
-    ComplaintResponseDto getComplaint(Long id);
-    Page<ComplaintResponseDto> getMyComplaints(String userEmail, Pageable pageable);
-    Page<ComplaintResponseDto> getWardComplaints(Long wardId, Pageable pageable);
-    Page<ComplaintResponseDto> getOfficerQueue(String officerEmail, Pageable pageable);
-    ComplaintResponseDto updateStatus(Long id, String status, String notes, String officerEmail);
-    ComplaintResponseDto reassign(Long id, Long officerId);
-    void softDelete(Long id);
+/**
+ * Composite interface combining all complaint operations.
+ * Extends focused, segregated interfaces for better Interface Segregation Principle compliance.
+ * 
+ * For new code, prefer injecting specific contract interfaces:
+ * - ComplaintSubmissionService for submission operations
+ * - ComplaintRetrievalService for retrieval operations
+ * - ComplaintStatusService for status updates
+ * 
+ * This interface is maintained for backward compatibility.
+ */
+public interface ComplaintService extends
+        ComplaintSubmissionService,
+        ComplaintRetrievalService,
+        ComplaintStatusService {
+    
+    /**
+     * Get current user's complaints (convenience method).
+     * Maps to getByUser() from ComplaintRetrievalService for backward compatibility.
+     */
+    // Legacy methods retained for backward compatibility
+    ComplaintResponseDto getComplaint(Long id);  // Maps to getById()
+    
+    /**
+     * Reassign complaint to different officer.
+     *
+     * @param complaintId Complaint ID
+     * @param officerId   New officer ID
+     * @return Updated complaint
+     */
+    ComplaintResponseDto reassign(Long complaintId, Long officerId);
 }

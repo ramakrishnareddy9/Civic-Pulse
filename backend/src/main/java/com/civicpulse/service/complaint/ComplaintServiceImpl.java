@@ -2,17 +2,15 @@ package com.civicpulse.service.complaint;
 
 import com.civicpulse.exception.ComplaintNotFoundException;
 import com.civicpulse.model.dto.request.ComplaintRequestDto;
-import com.civicpulse.model.dto.response.AiCategorizationResultDto;
 import com.civicpulse.model.dto.response.ComplaintResponseDto;
 import com.civicpulse.model.entity.*;
-import com.civicpulse.model.enums.ComplaintCategory;
 import com.civicpulse.model.enums.ComplaintStatus;
 import com.civicpulse.model.enums.Priority;
 import com.civicpulse.repository.*;
 import com.civicpulse.service.FileStorageService;
-import com.civicpulse.service.ai.AiCategorizationService;
-import com.civicpulse.service.ai.AiSentimentService;
 import com.civicpulse.service.ai.VectorStoreService;
+import com.civicpulse.service.complaint.enrichment.ComplaintEnrichmentPipeline;
+import com.civicpulse.service.complaint.enrichment.EnrichmentException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,6 +23,14 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Implementation of ComplaintService.
+ * Responsibilities: complaint creation, retrieval, status updates, reassignment.
+ * 
+ * Enrichment logic delegated to ComplaintEnrichmentPipeline (SRP + OCP).
+ * File handling delegated to FileStorageService (SRP).
+ * Notification delegated to messaging template (SRP).
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -34,27 +40,26 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final UserRepository userRepository;
     private final WardRepository wardRepository;
     private final OfficerRepository officerRepository;
-    private final DepartmentRepository departmentRepository;
-    private final AiCategorizationService aiCategorizationService;
-    private final AiSentimentService aiSentimentService;
+    private final ComplaintEnrichmentPipeline enrichmentPipeline;
     private final VectorStoreService vectorStoreService;
-    private final SlaService slaService;
     private final FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Transactional
-    public ComplaintResponseDto submitComplaint(ComplaintRequestDto dto,
-                                                List<MultipartFile> images,
-                                                String userEmail) {
+    public ComplaintResponseDto submit(ComplaintRequestDto dto,
+                                       List<MultipartFile> images,
+                                       String userEmail) {
+        // 1. Get citizen
         User citizen = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userEmail));
 
+        // 2. Get ward if provided
         Ward ward = dto.wardId() != null
                 ? wardRepository.findById(dto.wardId()).orElse(null)
                 : null;
 
-        // Build complaint
+        // 3. Create base complaint
         Complaint complaint = Complaint.builder()
                 .title(dto.title())
                 .description(dto.description())
@@ -68,75 +73,64 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .build();
 
         complaint = complaintRepository.save(complaint);
+        log.info("Complaint created (ID: {}): {}", complaint.getId(), complaint.getTitle());
 
-        // AI enrichment (async-like — happens synchronously but failures don't block)
+        // 4. Apply enrichment pipeline (AI categorization, sentiment, SLA, etc.)
         try {
-            AiCategorizationResultDto aiResult = aiCategorizationService.categorize(
-                    dto.title(), dto.description());
-
-            complaint.setAiCategory(aiResult.category());
-            complaint.setAiPriority(aiResult.priority());
-            complaint.setAiDepartment(aiResult.department());
-            complaint.setAiReason(aiResult.reason());
-
-            // Apply AI-suggested category and priority
-            try {
-                complaint.setCategory(ComplaintCategory.valueOf(aiResult.category()));
-            } catch (IllegalArgumentException e) {
-                complaint.setCategory(ComplaintCategory.OTHER);
+            complaint = enrichmentPipeline.enrich(complaint);
+        } catch (EnrichmentException ex) {
+            if (ex.getSeverity() == EnrichmentException.Severity.HIGH) {
+                log.error("HIGH severity enrichment failed, rolling back: {}", ex.getMessage());
+                throw new RuntimeException("Complaint enrichment failed - cannot proceed", ex);
             }
-            try {
-                complaint.setPriority(Priority.valueOf(aiResult.priority()));
-            } catch (IllegalArgumentException e) {
-                complaint.setPriority(Priority.MEDIUM);
-            }
-
-            // Find matching department
-            if (aiResult.department() != null) {
-                departmentRepository.findByName(aiResult.department())
-                        .ifPresent(complaint::setDepartment);
-            }
-
-            // Sentiment score
-            complaint.setSentimentScore(
-                    aiSentimentService.scoreSentiment(dto.title(), dto.description()));
-
-            // SLA deadline
-            complaint.setSlaDeadline(slaService.calculateDeadline(
-                    complaint.getCategory(), complaint.getPriority()));
-
-        } catch (Exception ex) {
-            log.warn("AI enrichment failed for complaint, using defaults: {}", ex.getMessage());
+            log.warn("Enrichment partially failed (non-blocking): {}", ex.getMessage());
+            // Continue with partially enriched complaint
         }
 
-        // Handle image uploads
+        // 5. Handle image uploads
         if (images != null && !images.isEmpty()) {
             for (MultipartFile image : images) {
                 if (!image.isEmpty()) {
-                    String fileUrl = fileStorageService.store(image);
-                    ComplaintImage ci = ComplaintImage.builder()
-                            .complaint(complaint)
-                            .fileName(image.getOriginalFilename())
-                            .fileUrl(fileUrl)
-                            .contentType(image.getContentType())
-                            .fileSize(image.getSize())
-                            .build();
-                    complaint.getImages().add(ci);
+                    try {
+                        String fileUrl = fileStorageService.store(image);
+                        ComplaintImage ci = ComplaintImage.builder()
+                                .complaint(complaint)
+                                .fileName(image.getOriginalFilename())
+                                .fileUrl(fileUrl)
+                                .contentType(image.getContentType())
+                                .fileSize(image.getSize())
+                                .build();
+                        complaint.getImages().add(ci);
+                        log.debug("Image attached to complaint {}: {}", complaint.getId(), fileUrl);
+                    } catch (Exception ex) {
+                        log.warn("Image upload failed for complaint {}: {}", complaint.getId(), ex.getMessage());
+                    }
                 }
             }
         }
 
+        // 6. Save final complaint
         complaint = complaintRepository.save(complaint);
 
-        // Embed into vector store for RAG
-        final Complaint finalComplaint = complaint;
+        // 7. Embed into vector store for RAG (non-blocking)
         try {
-            vectorStoreService.embedComplaint(finalComplaint);
+            vectorStoreService.embedComplaint(complaint);
+            log.debug("Complaint {} embedded into vector store", complaint.getId());
         } catch (Exception ex) {
-            log.warn("Vector store embedding failed: {}", ex.getMessage());
+            log.warn("Vector store embedding failed for complaint {}: {}", complaint.getId(), ex.getMessage());
         }
 
+        log.info("Complaint submission completed (ID: {})", complaint.getId());
         return toDto(complaint);
+    }
+
+    @Override
+    @Transactional
+    public ComplaintResponseDto submitComplaint(ComplaintRequestDto dto,
+                                                List<MultipartFile> images,
+                                                String userEmail) {
+        // Legacy method — delegates to new submit() method for backward compatibility
+        return submit(dto, images, userEmail);
     }
 
     @Override
@@ -150,25 +144,46 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ComplaintResponseDto> getMyComplaints(String userEmail, Pageable pageable) {
+    public ComplaintResponseDto getById(Long id) {
+        // Maps to getComplaint() for compatibility with new interface
+        return getComplaint(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ComplaintResponseDto> getByUser(String userEmail, Pageable pageable) {
         User user = userRepository.findByEmail(userEmail)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userEmail));
         return complaintRepository.findByCitizenIdAndIsDeletedFalse(user.getId(), pageable)
                 .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ComplaintResponseDto> getWardComplaints(Long wardId, Pageable pageable) {
+    public Page<ComplaintResponseDto> getMyComplaints(String userEmail, Pageable pageable) {
+        // Maps to getByUser() for backward compatibility
+        return getByUser(userEmail, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ComplaintResponseDto> getByWard(Long wardId, Pageable pageable) {
         return complaintRepository.findByWardIdAndIsDeletedFalse(wardId, pageable)
                 .map(this::toDto);
     }
 
     @Override
     @Transactional(readOnly = true)
+    public Page<ComplaintResponseDto> getWardComplaints(Long wardId, Pageable pageable) {
+        // Maps to getByWard() for backward compatibility
+        return getByWard(wardId, pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<ComplaintResponseDto> getOfficerQueue(String officerEmail, Pageable pageable) {
         User user = userRepository.findByEmail(officerEmail)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + officerEmail));
         Officer officer = officerRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Officer profile not found"));
         return complaintRepository.findByOfficerIdAndIsDeletedFalse(officer.getId(), pageable)
