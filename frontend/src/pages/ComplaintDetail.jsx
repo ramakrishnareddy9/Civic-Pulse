@@ -4,6 +4,56 @@ import { useComplaints } from '@hooks/useComplaints'
 import { useAuth } from '@hooks/useAuth'
 import { useNotification } from '@hooks/useNotification'
 import { ROUTES } from '@utils/constants'
+import CivicMap from '@components/common/CivicMap'
+
+const STATUS_CONFIG = {
+  OPEN: { label: 'Open', bg: '#fef3c7', color: '#92400e', icon: 'pending', timeline: 'Complaint Registered' },
+  IN_PROGRESS: { label: 'In Progress', bg: '#dbeafe', color: '#1e40af', icon: 'autorenew', timeline: 'Under Investigation' },
+  RESOLVED: { label: 'Resolved', bg: '#d1fae5', color: '#065f46', icon: 'check_circle', timeline: 'Issue Resolved' },
+  CLOSED: { label: 'Closed', bg: '#f1f5f9', color: '#475569', icon: 'archive', timeline: 'Case Closed' },
+}
+
+const PRIORITY_CONFIG = {
+  CRITICAL: { label: 'Critical', bg: '#fee2e2', color: '#991b1b', icon: 'emergency' },
+  HIGH: { label: 'High Priority', bg: '#ffedd5', color: '#9a3412', icon: 'warning' },
+  MEDIUM: { label: 'Medium', bg: '#fef9c3', color: '#854d0e', icon: 'info' },
+  LOW: { label: 'Low Priority', bg: '#f1f5f9', color: '#475569', icon: 'low_priority' },
+}
+
+const STATUS_TIMELINE = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+
+function SLACounter({ slaDueDate, status }) {
+  if (!slaDueDate) return null
+  const now = new Date()
+  const due = new Date(slaDueDate)
+  const diff = due - now
+  const isBreached = diff < 0 && status !== 'RESOLVED' && status !== 'CLOSED'
+  const isResolved = status === 'RESOLVED' || status === 'CLOSED'
+
+  if (isResolved) {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full" style={{ background: '#d1fae5', color: '#065f46' }}>
+        <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+        SLA Met
+      </span>
+    )
+  }
+
+  const hours = Math.abs(Math.floor(diff / (1000 * 60 * 60)))
+  const mins = Math.abs(Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)))
+
+  return (
+    <span
+      className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
+      style={{ background: isBreached ? '#fee2e2' : '#fef3c7', color: isBreached ? '#991b1b' : '#92400e' }}
+    >
+      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+        {isBreached ? 'warning' : 'schedule'}
+      </span>
+      {isBreached ? `SLA Breached by ${hours}h ${mins}m` : `SLA: ${hours}h ${mins}m left`}
+    </span>
+  )
+}
 
 export function ComplaintDetail() {
   const { id } = useParams()
@@ -18,32 +68,47 @@ export function ComplaintDetail() {
   const [noteInput, setNoteInput] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [activeImage, setActiveImage] = useState(0)
 
   useEffect(() => {
-    if (id) {
-      fetchDetail(id)
-    }
+    if (id) fetchDetail(id)
   }, [id])
+
+  const getDashboardRoute = () => {
+    if (user?.role === 'OFFICER') return ROUTES.OFFICER.DASHBOARD
+    if (user?.role === 'ADMIN') return ROUTES.ADMIN.DASHBOARD
+    return ROUTES.CITIZEN.DASHBOARD
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="font-body-lg text-primary">Loading complaint details...</p>
+      <div style={{ background: 'var(--gov-surface)', minHeight: 'calc(100vh - 56px)' }}>
+        <div className="max-w-4xl mx-auto px-4 md:px-8 py-10">
+          <div className="animate-pulse space-y-4">
+            <div className="skeleton h-6 w-48 rounded" />
+            <div className="skeleton h-10 w-2/3 rounded" />
+            <div className="grid grid-cols-3 gap-4 mt-6">
+              {[1,2,3].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
+            </div>
+            <div className="skeleton h-48 rounded-2xl" />
+          </div>
+        </div>
       </div>
     )
   }
 
   if (error || !currentComplaint) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-xl">
-        <span className="material-symbols-outlined text-4xl text-error mb-sm">error</span>
-        <p className="font-body-lg text-on-surface-variant">Complaint not found or error loading.</p>
-        <button 
-          onClick={() => navigate(-1)} 
-          className="mt-md px-lg py-sm bg-primary text-on-primary rounded-lg font-label-lg"
-        >
-          Go Back
-        </button>
+      <div style={{ background: 'var(--gov-surface)', minHeight: 'calc(100vh - 56px)' }} className="flex flex-col items-center justify-center px-4">
+        <div className="text-center animate-fade-in">
+          <span className="material-symbols-outlined text-5xl mb-3" style={{ color: '#ef4444' }}>error_outline</span>
+          <h2 className="text-xl font-bold mb-1" style={{ color: 'var(--gov-navy)' }}>Complaint Not Found</h2>
+          <p className="text-sm text-gray-500 mb-6">The complaint you're looking for doesn't exist or you don't have access.</p>
+          <button onClick={() => navigate(getDashboardRoute())} className="gov-btn-primary">
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     )
   }
@@ -51,17 +116,16 @@ export function ComplaintDetail() {
   const complaint = currentComplaint
   const isOwner = user?.email === complaint.submittedBy
   const isStaff = user?.role === 'OFFICER' || user?.role === 'ADMIN'
+  const statusCfg = STATUS_CONFIG[complaint.status] || STATUS_CONFIG.OPEN
+  const priorityCfg = PRIORITY_CONFIG[complaint.priority] || PRIORITY_CONFIG.LOW
+  const currentStatusIndex = STATUS_TIMELINE.indexOf(complaint.status)
 
   const handleDelete = async () => {
     setDeleting(true)
     try {
-      const ok = await deleteComplaint(id)
-      if (ok) {
-        success('Complaint deleted successfully')
-        navigate(ROUTES.CITIZEN.DASHBOARD)
-      } else {
-        showError('Failed to delete complaint')
-      }
+      await deleteComplaint(id)
+      success('Complaint withdrawn successfully.')
+      navigate(ROUTES.CITIZEN.DASHBOARD)
     } catch (err) {
       showError('Failed to delete complaint')
     } finally {
@@ -77,7 +141,7 @@ export function ComplaintDetail() {
       await updateComplaintStatus(complaint.id, complaint.status, noteInput)
       success('Note posted successfully!')
       setNoteInput('')
-      fetchDetail(id) // reload details
+      fetchDetail(id)
     } catch (err) {
       showError('Failed to post note')
     } finally {
@@ -86,12 +150,18 @@ export function ComplaintDetail() {
   }
 
   const handleStatusUpdate = async () => {
+    if (!newStatus || !noteInput.trim()) {
+      showError('Please select a status and add a note.')
+      return
+    }
     setUpdating(true)
     try {
-      await updateComplaintStatus(complaint.id, newStatus, 'Status changed by supervisor')
+      await updateComplaintStatus(complaint.id, newStatus, noteInput)
       success('Status updated successfully!')
       setShowStatusModal(false)
-      fetchDetail(id) // reload
+      setNoteInput('')
+      setNewStatus('')
+      fetchDetail(id)
     } catch (err) {
       showError('Failed to update status')
     } finally {
@@ -99,354 +169,444 @@ export function ComplaintDetail() {
     }
   }
 
-  const getStatusBadge = (status) => {
-    const badges = {
-      OPEN: 'bg-amber-100 text-amber-700',
-      IN_PROGRESS: 'bg-blue-100 text-blue-700',
-      RESOLVED: 'bg-green-100 text-green-700',
-      CLOSED: 'bg-gray-100 text-gray-700'
-    }
-    return badges[status] || 'bg-gray-100 text-gray-700'
-  }
-
-  const getPriorityBadge = (priority) => {
-    const badges = {
-      CRITICAL: 'bg-red-100 text-red-700',
-      HIGH: 'bg-orange-100 text-orange-700',
-      MEDIUM: 'bg-yellow-100 text-yellow-700',
-      LOW: 'bg-blue-100 text-blue-700'
-    }
-    return badges[priority] || 'bg-gray-100 text-gray-700'
-  }
-
   return (
-    <div className="bg-background text-on-background min-h-screen flex flex-col">
-      <main className="flex-grow w-full max-w-[1312px] mx-auto px-margin-mobile md:px-margin-desktop py-xl text-left">
-        
-        {/* Breadcrumbs & Actions */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-md mb-lg">
-          <nav className="flex items-center gap-xs text-on-surface-variant font-label-md text-label-md">
-            <span className="hover:underline cursor-pointer" onClick={() => navigate(-1)}>Complaints</span>
-            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-            <span className="font-bold text-on-surface">Case #CP-{complaint.id}</span>
-          </nav>
-          <div className="flex items-center gap-sm">
-            {isOwner && (
-              <button 
-                onClick={() => setShowDeleteModal(true)}
-                className="flex items-center gap-xs px-md py-sm border border-error text-error rounded-lg hover:bg-error-container/10 transition-colors font-label-lg text-label-lg cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">delete</span> Delete
-              </button>
-            )}
-            {isStaff && (
-              <button 
-                onClick={() => { setNewStatus(complaint.status); setShowStatusModal(true); }}
-                className="flex items-center gap-xs px-md py-sm bg-primary text-on-primary rounded-lg shadow-sm hover:opacity-90 transition-opacity font-label-lg text-label-lg cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">edit</span> Update Status
-              </button>
-            )}
-          </div>
-        </div>
+    <div style={{ background: 'var(--gov-surface)', minHeight: 'calc(100vh - 56px)' }}>
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-8 animate-fade-in">
 
-        {/* Header Section */}
-        <div className="mb-xl">
-          <div className="flex flex-wrap items-center gap-md mb-sm">
-            <h1 className="font-headline-lg text-headline-lg text-on-surface font-bold">{complaint.title}</h1>
-            <span className={`px-md py-xs rounded-full font-label-md text-label-md flex items-center gap-xs ${getStatusBadge(complaint.status)}`}>
-              <span className="w-2 h-2 rounded-full bg-current"></span> {complaint.status}
-            </span>
-            <span className={`px-md py-xs rounded-full font-label-md text-label-md flex items-center gap-xs ${getPriorityBadge(complaint.priority)}`}>
-              <span className="material-symbols-outlined text-[16px]">schedule</span> {complaint.priority} Priority
-            </span>
-          </div>
-          <p className="text-on-surface-variant font-body-md text-body-md max-w-3xl">{complaint.description}</p>
-        </div>
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-sm mb-6">
+          <button onClick={() => navigate(getDashboardRoute())} className="flex items-center gap-1.5 font-medium hover:underline" style={{ color: 'var(--gov-blue)' }}>
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            {user?.role === 'OFFICER' ? 'Triage Queue' : 'My Complaints'}
+          </button>
+          <span className="text-gray-400">/</span>
+          <span className="font-semibold text-gray-600">Case #CP-{complaint.id}</span>
+        </nav>
 
-        {/* Main Bento Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-          
-          {/* Left Column */}
-          <div className="lg:col-span-8 flex flex-col gap-gutter">
-            
-            {/* Summary Card */}
-            <div className="bg-white border border-outline-variant p-lg rounded-xl shadow-sm mui-card-shadow">
-              <h2 className="font-headline-md text-headline-md font-bold mb-md">Complaint Summary</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-xl">
-                <div className="flex gap-md">
-                  <div className="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-primary">location_on</span>
-                  </div>
-                  <div>
-                    <p className="text-on-surface-variant font-label-md text-label-md">Location / Ward</p>
-                    <p className="font-body-md text-body-md font-semibold">{complaint.location || 'Location coordinates not provided'}</p>
-                    <p className="text-on-surface-variant font-label-md text-label-md">{complaint.ward}</p>
-                  </div>
-                </div>
-                <div className="flex gap-md">
-                  <div className="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-primary">person</span>
-                  </div>
-                  <div>
-                    <p className="text-on-surface-variant font-label-md text-label-md">Submitter Info</p>
-                    <p className="font-body-md text-body-md font-semibold">{complaint.submittedBy || 'Anonymous Citizen'}</p>
-                    <p className="text-on-surface-variant font-label-md text-label-md">Citizen App (Verified)</p>
-                  </div>
-                </div>
+        {/* Header */}
+        <div className="bg-white rounded-2xl border p-6 mb-5" style={{ borderColor: 'var(--gov-border)' }}>
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-5">
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span
+                  className="text-xs font-bold px-2.5 py-1 rounded"
+                  style={{ background: 'rgba(10,35,66,0.06)', color: 'var(--gov-navy)' }}
+                >
+                  #CP-{complaint.id}
+                </span>
+                <span
+                  className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ background: statusCfg.bg, color: statusCfg.color }}
+                >
+                  <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>{statusCfg.icon}</span>
+                  {statusCfg.label}
+                </span>
+                {complaint.priority && (
+                  <span
+                    className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                    style={{ background: priorityCfg.bg, color: priorityCfg.color }}
+                  >
+                    <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>{priorityCfg.icon}</span>
+                    {priorityCfg.label}
+                  </span>
+                )}
+                <SLACounter slaDueDate={complaint.slaDueDate} status={complaint.status} />
               </div>
-
-              {/* Map View */}
-              <div className="mt-lg h-48 rounded-lg overflow-hidden bg-surface-container relative group border border-outline-variant">
-                <img 
-                  className="w-full h-full object-cover grayscale opacity-80 group-hover:grayscale-0 transition-all duration-500" 
-                  alt="City GIS locator map"
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPFr3n3BIeUozDT-DM2zCpSd3GrSz4RJZrrh21zwi60s8NeL3aCPrmezpYisAahZwkgeL0pxxw1jxoKJQCMsAYHQDXgcAqJsKgAVum4ujCDbpVVQXODrdSdxNvt0R6LH857lhUYOjNqthT_E398CZ9rw1KqzpZUTTdWCwExhzK4GpHEX6Y1M85_LbnmcOEv7g1sRBMn9NlpP1PXQ3_WFRCU2XZd5QJ5l2OH0nlK2G4IE0_LMQC_A3FMenFCgoOvY9qdoR0I2eFg3I"
-                />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="bg-primary text-on-primary p-xs rounded-full shadow-lg border-2 border-white flex items-center justify-center">
-                    <span className="material-symbols-outlined text-[20px]">location_on</span>
-                  </div>
-                </div>
+              <h1 className="text-2xl font-black mb-2" style={{ color: 'var(--gov-navy)' }}>{complaint.title}</h1>
+              <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                {complaint.category && (
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">category</span>
+                    {complaint.category}
+                  </span>
+                )}
+                {complaint.ward && (
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">location_on</span>
+                    {complaint.ward}
+                  </span>
+                )}
+                {complaint.createdAt && (
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">calendar_today</span>
+                    {new Date(complaint.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                )}
               </div>
             </div>
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {isStaff && complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED' && (
+                <button
+                  onClick={() => { setNewStatus(complaint.status); setShowStatusModal(true) }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all hover:shadow-sm"
+                  style={{ borderColor: 'var(--gov-navy)', color: 'var(--gov-navy)' }}
+                >
+                  <span className="material-symbols-outlined text-sm">edit_note</span>
+                  Update Status
+                </button>
+              )}
+              {isOwner && complaint.status === 'OPEN' && (
+                <button
+                  onClick={() => setShowDeleteModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all hover:shadow-sm"
+                  style={{ borderColor: '#dc2626', color: '#dc2626' }}
+                >
+                  <span className="material-symbols-outlined text-sm">delete_outline</span>
+                  Withdraw
+                </button>
+              )}
+            </div>
+          </div>
 
-            {/* Attachments Section */}
-            {complaint.images && complaint.images.length > 0 && (
-              <div className="bg-white border border-outline-variant p-lg rounded-xl shadow-sm mui-card-shadow">
-                <div className="flex justify-between items-center mb-md">
-                  <h2 className="font-headline-md text-headline-md font-bold">Photos &amp; Attachments</h2>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
-                  {complaint.images.map((img, i) => (
-                    <div key={i} className="aspect-square rounded-lg overflow-hidden relative group cursor-pointer border border-outline-variant">
-                      <img 
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" 
-                        alt={`Complaint photo attachment ${i + 1}`}
-                        src={img} 
-                        onClick={() => window.open(img, '_blank')}
+          {/* Status Timeline */}
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--gov-border)' }}>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Resolution Progress</p>
+            <div className="flex items-center gap-2">
+              {STATUS_TIMELINE.map((s, i) => {
+                const sCfg = STATUS_CONFIG[s]
+                const isPast = i <= currentStatusIndex
+                const isCurrent = i === currentStatusIndex
+                return (
+                  <React.Fragment key={s}>
+                    <div className="flex flex-col items-center gap-1">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all"
+                        style={{
+                          background: isPast ? sCfg.color : 'white',
+                          borderColor: isPast ? sCfg.color : 'var(--gov-border)',
+                          boxShadow: isCurrent ? `0 0 0 3px ${sCfg.color}30` : 'none',
+                        }}
+                      >
+                        <span
+                          className="material-symbols-outlined text-sm"
+                          style={{ color: isPast ? 'white' : 'var(--gov-text-light)', fontVariationSettings: "'FILL' 1" }}
+                        >
+                          {sCfg.icon}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-center leading-tight hidden sm:block" style={{ color: isPast ? sCfg.color : 'var(--gov-text-light)', maxWidth: 60 }}>
+                        {sCfg.timeline}
+                      </span>
+                    </div>
+                    {i < STATUS_TIMELINE.length - 1 && (
+                      <div className="flex-1 h-0.5 transition-all" style={{ background: i < currentStatusIndex ? 'var(--gov-green-light)' : 'var(--gov-border)' }} />
+                    )}
+                  </React.Fragment>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Description */}
+            <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--gov-border)' }}>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-3">Complaint Description</h2>
+              <p className="text-base text-gray-700 leading-relaxed">{complaint.description || 'No description provided.'}</p>
+
+              {complaint.location && (
+                <div className="mt-4 pt-4 border-t flex flex-col gap-4" style={{ borderColor: 'var(--gov-border)' }}>
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-base mt-0.5" style={{ color: 'var(--gov-blue)', fontVariationSettings: "'FILL' 1" }}>location_on</span>
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase">Location</p>
+                      <p className="text-sm font-medium text-gray-700">{complaint.location}</p>
+                    </div>
+                  </div>
+
+                  {complaint.latitude && complaint.longitude && (
+                    <div className="w-full h-48 rounded-xl overflow-hidden border border-[#d0d7e3]">
+                      <CivicMap
+                        center={[complaint.latitude, complaint.longitude]}
+                        zoom={15}
+                        interactive={false}
+                        markers={[{
+                          id: complaint.id,
+                          latitude: complaint.latitude,
+                          longitude: complaint.longitude,
+                          title: complaint.title,
+                          priority: complaint.priority,
+                          status: complaint.status,
+                          address: complaint.location,
+                        }]}
+                        height="100%"
                       />
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Timeline */}
-            <div className="bg-white border border-outline-variant p-lg rounded-xl shadow-sm mui-card-shadow">
-              <h2 className="font-headline-md text-headline-md font-bold mb-xl">Activity Timeline</h2>
-              <div className="relative pl-8 flex flex-col gap-lg text-left">
-                <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-outline-variant"></div>
-                
-                {complaint.status === 'RESOLVED' && (
-                  <div className="relative">
-                    <div className="absolute -left-[27px] w-4 h-4 rounded-full bg-green-600 ring-4 ring-green-100 z-10"></div>
-                    <div>
-                      <p className="font-label-lg text-label-lg font-bold text-on-surface">Resolved</p>
-                      <p className="text-on-surface-variant font-body-md text-body-md">Municipal crew completed site intervention and updated resolution state.</p>
-                      {complaint.resolution && <p className="text-primary font-body-md bg-secondary-container/30 p-sm rounded mt-xs">{complaint.resolution}</p>}
-                    </div>
-                  </div>
-                )}
-
-                {complaint.status === 'IN_PROGRESS' && (
-                  <div className="relative">
-                    <div className="absolute -left-[27px] w-4 h-4 rounded-full bg-primary ring-4 ring-secondary-container z-10"></div>
-                    <div>
-                      <p className="font-label-lg text-label-lg font-bold text-on-surface">Work in Progress</p>
-                      <p className="text-on-surface-variant font-body-md text-body-md">Department field staff accepted task and initiated mitigation.</p>
-                    </div>
-                  </div>
-                )}
-
-                {complaint.assignedTo && (
-                  <div className="relative opacity-80">
-                    <div className="absolute -left-[27px] w-4 h-4 rounded-full bg-outline z-10"></div>
-                    <div>
-                      <p className="font-label-lg text-label-lg font-bold text-on-surface">Assigned to Officer</p>
-                      <p className="text-on-surface-variant font-body-md text-body-md">Routed automatically to field crew member: <strong>{complaint.assignedTo}</strong>.</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="relative opacity-80">
-                  <div className="absolute -left-[27px] w-4 h-4 rounded-full bg-outline z-10"></div>
-                  <div>
-                    <p className="font-label-lg text-label-lg font-bold text-on-surface">Complaint Created</p>
-                    <p className="text-on-surface-variant font-body-md text-body-md">Submission received via verified Portal workflow.</p>
-                    <p className="text-xs text-outline mt-1">{complaint.createdAt ? new Date(complaint.createdAt).toLocaleString() : ''}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Right Column */}
-          <div className="lg:col-span-4 flex flex-col gap-gutter">
-            
-            {/* Comments Feed */}
-            <div className="bg-white border border-outline-variant rounded-xl shadow-sm mui-card-shadow flex flex-col h-fit">
-              <div className="p-lg border-b border-outline-variant">
-                <h2 className="font-headline-md text-headline-md font-bold">Official Notes</h2>
-              </div>
-              
-              <div className="p-lg flex flex-col gap-lg max-h-[400px] overflow-y-auto">
-                {complaint.officerNotes ? (
-                  <div className="flex gap-md">
-                    <div className="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold text-[12px] shrink-0">ST</div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between">
-                        <span className="font-label-md text-label-md font-bold text-primary">Department Crew</span>
-                      </div>
-                      <p className="bg-surface-container-low p-md rounded-lg mt-xs font-body-md text-body-md text-on-surface-variant">
-                        {complaint.officerNotes}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-on-surface-variant font-label-md text-center py-md italic">No official notes posted on this ticket yet.</p>
-                )}
-              </div>
-
-              {isStaff && (
-                <div className="p-lg border-t border-outline-variant">
-                  <div className="relative">
-                    <textarea 
-                      value={noteInput}
-                      onChange={(e) => setNoteInput(e.target.value)}
-                      className="w-full rounded-lg border-outline-variant focus:ring-primary focus:border-primary font-body-md text-body-md p-md pr-12 h-24 resize-none outline-none border" 
-                      placeholder="Add an official note..."
-                      maxLength={500}
-                      disabled={updating}
-                    ></textarea>
-                    <button 
-                      onClick={handlePostNote}
-                      disabled={updating || !noteInput.trim()}
-                      className="absolute bottom-3 right-3 text-primary hover:bg-surface-container p-sm rounded-full transition-colors cursor-pointer disabled:opacity-30"
-                    >
-                      <span className="material-symbols-outlined">send</span>
-                    </button>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Performance Stats */}
-            <div className="bg-primary text-on-primary p-lg rounded-xl shadow-md">
-              <h3 className="font-label-lg text-label-lg opacity-80 mb-md font-bold">Response Performance</h3>
-              <div className="space-y-md">
-                <div className="flex justify-between items-center">
-                  <span className="font-body-md text-body-md">SLA Target</span>
-                  <span className="font-bold">48 Hours</span>
+            {/* Images */}
+            {complaint.images && complaint.images.length > 0 && (
+              <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--gov-border)' }}>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-3">
+                  Evidence Photos ({complaint.images.length})
+                </h2>
+                <div className="rounded-xl overflow-hidden mb-3" style={{ maxHeight: '320px' }}>
+                  <img
+                    src={complaint.images[activeImage]}
+                    alt={`Evidence ${activeImage + 1}`}
+                    className="w-full h-full object-cover"
+                    style={{ maxHeight: '320px' }}
+                  />
                 </div>
-                <div className="w-full bg-on-primary/20 h-2 rounded-full overflow-hidden">
-                  <div className="bg-on-primary h-full w-[65%]"></div>
+                {complaint.images.length > 1 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {complaint.images.map((img, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveImage(i)}
+                        className="w-16 h-16 rounded-lg overflow-hidden border-2 transition-all"
+                        style={{ borderColor: i === activeImage ? 'var(--gov-navy)' : 'transparent' }}
+                      >
+                        <img src={img} alt={`Thumbnail ${i + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Officer Notes */}
+            {complaint.officerNotes && (
+              <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--gov-border)' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-base" style={{ color: 'var(--gov-navy)', fontVariationSettings: "'FILL' 1" }}>assignment_ind</span>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400">Officer Field Notes</h2>
                 </div>
-                <div className="flex justify-between items-center font-label-md text-label-md opacity-80 text-xs">
-                  <span>Priority: {complaint.priority}</span>
-                  <span>Target Due: Standard</span>
+                <div
+                  className="rounded-xl p-4 border-l-4"
+                  style={{ background: 'rgba(10,35,66,0.03)', borderLeftColor: 'var(--gov-navy)' }}
+                >
+                  <p className="text-sm text-gray-700 leading-relaxed">{complaint.officerNotes}</p>
+                  {complaint.assignedTo && (
+                    <p className="text-xs font-bold mt-2" style={{ color: 'var(--gov-navy)' }}>
+                      — {complaint.assignedTo}
+                    </p>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {/* Add Note (staff) */}
+            {isStaff && (
+              <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--gov-border)' }}>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-3">Add Field Note</h2>
+                <textarea
+                  value={noteInput}
+                  onChange={e => setNoteInput(e.target.value)}
+                  placeholder="Add a progress note, dispatch update, or resolution details..."
+                  rows={3}
+                  className="gov-input resize-none mb-3"
+                  maxLength={500}
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">{noteInput.length}/500</span>
+                  <button
+                    onClick={handlePostNote}
+                    disabled={updating || !noteInput.trim()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
+                    style={{ background: 'var(--gov-navy)', color: 'white' }}
+                  >
+                    {updating ? (
+                      <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
+                    )}
+                    Post Note
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Case Details */}
+            <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--gov-border)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-4">Case Information</h3>
+              <div className="space-y-3">
+                {[
+                  { label: 'Case ID', value: `#CP-${complaint.id}`, icon: 'tag' },
+                  { label: 'Category', value: complaint.category || '—', icon: 'category' },
+                  { label: 'Ward', value: complaint.ward || '—', icon: 'location_on' },
+                  { label: 'Submitted By', value: complaint.submittedBy || 'Anonymous', icon: 'person' },
+                  { label: 'Assigned To', value: complaint.assignedTo || 'Unassigned', icon: 'badge' },
+                  { label: 'Filed On', value: complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—', icon: 'calendar_today' },
+                  { label: 'SLA Deadline', value: complaint.slaDueDate ? new Date(complaint.slaDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set', icon: 'schedule' },
+                ].map((item) => (
+                  <div key={item.label} className="flex gap-3">
+                    <span className="material-symbols-outlined text-sm mt-0.5 shrink-0" style={{ color: 'var(--gov-text-muted)' }}>{item.icon}</span>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{item.label}</p>
+                      <p className="text-sm font-semibold text-gray-700 truncate">{item.value}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Reference Links */}
-            <div className="bg-surface-container-low border border-outline-variant p-lg rounded-xl">
-              <h3 className="font-label-lg text-label-lg font-bold mb-md">Reference Links</h3>
-              <ul className="space-y-sm text-left">
-                <li>
-                  <a className="flex items-center justify-between group" href="#" onClick={(e) => e.preventDefault()}>
-                    <span className="font-body-md text-body-md text-on-surface-variant group-hover:text-primary transition-colors">Civic Charter 2026</span>
-                    <span className="material-symbols-outlined text-[18px] opacity-40">open_in_new</span>
-                  </a>
-                </li>
-                <li>
-                  <a className="flex items-center justify-between group" href="#" onClick={(e) => e.preventDefault()}>
-                    <span className="font-body-md text-body-md text-on-surface-variant group-hover:text-primary transition-colors">Past Repairs ({complaint.ward})</span>
-                    <span className="material-symbols-outlined text-[18px] opacity-40">open_in_new</span>
-                  </a>
-                </li>
-              </ul>
+            {/* Quick Actions */}
+            <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--gov-border)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Actions</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => navigate(getDashboardRoute())}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-colors hover:bg-gray-50"
+                  style={{ borderColor: 'var(--gov-border)', color: 'var(--gov-text)' }}
+                >
+                  <span className="material-symbols-outlined text-sm">arrow_back</span>
+                  Back to Dashboard
+                </button>
+                {isStaff && complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED' && (
+                  <button
+                    onClick={() => { setNewStatus(complaint.status); setShowStatusModal(true) }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+                    style={{ background: 'var(--gov-navy)', color: 'white' }}
+                  >
+                    <span className="material-symbols-outlined text-sm">edit_note</span>
+                    Update Status
+                  </button>
+                )}
+                {isOwner && complaint.status === 'OPEN' && (
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all hover:bg-red-50"
+                    style={{ borderColor: '#dc2626', color: '#dc2626' }}
+                  >
+                    <span className="material-symbols-outlined text-sm">delete_outline</span>
+                    Withdraw Complaint
+                  </button>
+                )}
+              </div>
             </div>
 
-          </div>
-
-        </div>
-
-      </main>
-
-      {/* Delete Modal Confirmation */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)}></div>
-          <div className="bg-white p-xl rounded-xl shadow-2xl max-w-sm w-full z-10 text-left border border-outline-variant">
-            <h3 className="font-headline-md text-headline-md text-primary font-bold mb-md">Delete Complaint</h3>
-            <p className="text-on-surface-variant font-body-md mb-lg">
-              Are you sure you want to delete this complaint? This action cannot be undone and will retract it from municipal workflows.
-            </p>
-            <div className="flex gap-md">
-              <button 
-                onClick={() => setShowDeleteModal(false)}
-                className="w-full py-md border border-outline-variant rounded-lg font-label-lg"
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleDelete}
-                className="w-full py-md bg-error text-on-primary rounded-lg font-label-lg hover:opacity-90 disabled:opacity-50"
-                disabled={deleting}
-              >
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
+            {/* Help */}
+            <div className="rounded-2xl border p-4" style={{ background: '#f0f9ff', borderColor: '#bae6fd' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined text-sm" style={{ color: '#0284c7', fontVariationSettings: "'FILL' 1" }}>help_center</span>
+                <p className="text-xs font-bold" style={{ color: '#075985' }}>Need Assistance?</p>
+              </div>
+              <p className="text-xs" style={{ color: '#0369a1' }}>
+                If your complaint hasn't been updated in 72 hours, contact your ward office or call our helpline at 1800-123-4567.
+              </p>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Status Update Modal */}
       {showStatusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowStatusModal(false)}></div>
-          <div className="bg-white p-xl rounded-xl shadow-2xl max-w-md w-full z-10 text-left border border-outline-variant">
-            <h3 className="font-headline-md text-headline-md text-primary font-bold mb-md">Update Status</h3>
-            <div className="space-y-lg mb-lg">
+        <div className="modal-backdrop" onClick={() => setShowStatusModal(false)}>
+          <div className="modal-content p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(10,35,66,0.07)' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--gov-navy)', fontVariationSettings: "'FILL' 1" }}>edit_note</span>
+              </div>
               <div>
-                <label className="block font-label-lg mb-xs">Select Status</label>
-                <select 
-                  value={newStatus}
-                  onChange={(e) => setNewStatus(e.target.value)}
-                  className="w-full p-md border border-outline-variant rounded-lg bg-white outline-none"
-                  disabled={updating}
-                >
-                  <option value="OPEN">Open</option>
-                  <option value="IN_PROGRESS">Work in Progress</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="CLOSED">Closed</option>
-                </select>
+                <h3 className="font-black text-lg" style={{ color: 'var(--gov-navy)' }}>Update Status</h3>
+                <p className="text-xs text-gray-500">#{`CP-${complaint.id}`} — {complaint.title}</p>
               </div>
             </div>
-            <div className="flex gap-md">
-              <button 
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">New Status</label>
+                <select
+                  value={newStatus}
+                  onChange={e => setNewStatus(e.target.value)}
+                  className="gov-input"
+                  disabled={updating}
+                >
+                  <option value="OPEN">Open / Unresolved</option>
+                  <option value="IN_PROGRESS">Work In Progress</option>
+                  <option value="RESOLVED">Resolved</option>
+                  <option value="CLOSED">Closed (Archived)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+                  Field Note <span style={{ color: 'var(--gov-red)' }}>*</span>
+                </label>
+                <textarea
+                  value={noteInput}
+                  onChange={e => setNoteInput(e.target.value)}
+                  className="gov-input resize-none"
+                  rows={4}
+                  placeholder="Describe the work performed, current status, or next steps..."
+                  maxLength={500}
+                  disabled={updating}
+                />
+                <p className="text-xs text-gray-400 text-right mt-1">{noteInput.length}/500</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
                 onClick={() => setShowStatusModal(false)}
-                className="w-full py-md border border-outline-variant rounded-lg font-label-lg"
+                className="flex-1 py-2.5 rounded-xl border text-sm font-bold transition-colors hover:bg-gray-50"
+                style={{ borderColor: 'var(--gov-border)', color: 'var(--gov-text-muted)' }}
                 disabled={updating}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleStatusUpdate}
-                className="w-full py-md bg-primary text-on-primary rounded-lg font-label-lg hover:opacity-90 disabled:opacity-50"
-                disabled={updating}
+                disabled={updating || !noteInput.trim() || !newStatus}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                style={{ background: 'var(--gov-navy)', color: 'white' }}
               >
-                {updating ? 'Saving...' : 'Save Status'}
+                {updating ? (
+                  <><span className="material-symbols-outlined text-sm animate-spin">sync</span> Saving...</>
+                ) : (
+                  <><span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>check</span> Save Changes</>
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: '#fee2e2' }}>
+                <span className="material-symbols-outlined text-2xl" style={{ color: '#dc2626', fontVariationSettings: "'FILL' 1" }}>delete_forever</span>
+              </div>
+              <h3 className="font-black text-lg mb-1" style={{ color: 'var(--gov-navy)' }}>Withdraw Complaint?</h3>
+              <p className="text-sm text-gray-500">
+                This will permanently withdraw case <strong>#CP-{complaint.id}</strong>. This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 py-2.5 rounded-xl border text-sm font-bold hover:bg-gray-50 transition-colors"
+                style={{ borderColor: 'var(--gov-border)', color: 'var(--gov-text)' }}
+                disabled={deleting}
+              >
+                Keep Complaint
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                style={{ background: '#dc2626', color: 'white' }}
+              >
+                {deleting ? (
+                  <><span className="material-symbols-outlined text-sm animate-spin">sync</span> Withdrawing...</>
+                ) : 'Yes, Withdraw'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

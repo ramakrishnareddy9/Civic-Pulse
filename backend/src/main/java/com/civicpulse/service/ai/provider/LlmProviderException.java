@@ -8,10 +8,12 @@ public class LlmProviderException extends Exception {
 
     public LlmProviderException(String message) {
         super(message);
+        this.errorType = ErrorType.API_ERROR;
     }
 
     public LlmProviderException(String message, Throwable cause) {
         super(message, cause);
+        this.errorType = ErrorType.API_ERROR;
     }
 
     public enum ErrorType {

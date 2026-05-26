@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -45,7 +47,7 @@ public class AiSentimentEnricher implements ComplaintEnricher {
                     systemPrompt, userPrompt, params, SentimentScoreDto.class
             );
 
-            complaint.setSentimentScore(scoreDto.urgency_score());
+            complaint.setSentimentScore(scoreDto.urgency_score() != null ? BigDecimal.valueOf(scoreDto.urgency_score()) : null);
             log.debug("Enriched complaint {} with sentiment score: {}", 
                     complaint.getId(), scoreDto.urgency_score());
             return complaint;
@@ -53,7 +55,7 @@ public class AiSentimentEnricher implements ComplaintEnricher {
         } catch (LlmProviderException ex) {
             log.warn("Sentiment analysis failed: {}", ex.getMessage());
             // Use default sentiment if analysis fails (non-blocking)
-            complaint.setSentimentScore(50);
+            complaint.setSentimentScore(BigDecimal.valueOf(50));
             throw new EnrichmentException(
                     "Sentiment analysis failed: " + ex.getMessage(),
                     getName(),

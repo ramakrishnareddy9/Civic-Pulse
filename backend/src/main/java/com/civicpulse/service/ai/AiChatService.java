@@ -31,14 +31,12 @@ public class AiChatService {
         try {
             // 1. Retrieve relevant complaint documents from vector store
             List<Document> relevantDocs = vectorStore.similaritySearch(
-                    SearchRequest.builder()
-                            .query(userMessage)
-                            .topK(5)
-                            .build()
+                    SearchRequest.query(userMessage)
+                            .withTopK(5)
             );
 
             String context = relevantDocs.stream()
-                    .map(Document::getText)
+                    .map(Document::getContent)
                     .collect(Collectors.joining("\n---\n"));
 
             // 2. Prepare RAG prompt with context

@@ -11,6 +11,7 @@ import com.civicpulse.service.FileStorageService;
 import com.civicpulse.service.ai.VectorStoreService;
 import com.civicpulse.service.complaint.enrichment.ComplaintEnrichmentPipeline;
 import com.civicpulse.service.complaint.enrichment.EnrichmentException;
+import com.civicpulse.service.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -44,6 +45,7 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final VectorStoreService vectorStoreService;
     private final FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MailService mailService;
 
     @Override
     @Transactional
@@ -54,10 +56,13 @@ public class ComplaintServiceImpl implements ComplaintService {
         User citizen = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userEmail));
 
-        // 2. Get ward if provided
-        Ward ward = dto.wardId() != null
-                ? wardRepository.findById(dto.wardId()).orElse(null)
-                : null;
+        // 2. Get ward if provided, otherwise resolve dynamically from coordinates
+        Ward ward = null;
+        if (dto.wardId() != null) {
+            ward = wardRepository.findById(dto.wardId()).orElse(null);
+        } else if (dto.latitude() != null && dto.longitude() != null) {
+            ward = findClosestWard(dto.latitude().doubleValue(), dto.longitude().doubleValue());
+        }
 
         // 3. Create base complaint
         Complaint complaint = Complaint.builder()
@@ -111,6 +116,20 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         // 6. Save final complaint
         complaint = complaintRepository.save(complaint);
+
+        // Trigger complaint submission email notification (Asynchronous)
+        try {
+            mailService.sendComplaintSubmissionEmail(
+                    complaint.getCitizen().getEmail(),
+                    complaint.getCitizen().getFullName(),
+                    complaint.getId(),
+                    complaint.getTitle(),
+                    complaint.getCategory() != null ? complaint.getCategory().name() : "OTHER",
+                    complaint.getWard() != null ? complaint.getWard().getName() : "General Triage Zone"
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to schedule complaint submission email: {}", ex.getMessage());
+        }
 
         // 7. Embed into vector store for RAG (non-blocking)
         try {
@@ -197,6 +216,7 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .filter(c -> !c.getIsDeleted())
                 .orElseThrow(() -> new ComplaintNotFoundException(id));
 
+        ComplaintStatus oldStatus = complaint.getStatus();
         ComplaintStatus newStatus = ComplaintStatus.valueOf(status.toUpperCase());
         complaint.setStatus(newStatus);
         if (notes != null) complaint.setOfficerNotes(notes);
@@ -215,6 +235,21 @@ public class ComplaintServiceImpl implements ComplaintService {
             );
         } catch (Exception ex) {
             log.warn("WebSocket notification failed: {}", ex.getMessage());
+        }
+
+        // Trigger complaint status update email notification (Asynchronous)
+        try {
+            mailService.sendComplaintStatusUpdateEmail(
+                    complaint.getCitizen().getEmail(),
+                    complaint.getCitizen().getFullName(),
+                    complaint.getId(),
+                    complaint.getTitle(),
+                    oldStatus.name(),
+                    newStatus.name(),
+                    notes
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to schedule status update email: {}", ex.getMessage());
         }
 
         return toDto(complaint);
@@ -261,5 +296,43 @@ public class ComplaintServiceImpl implements ComplaintService {
                 c.getSentimentScore(), imageUrls,
                 c.getCreatedAt(), c.getUpdatedAt()
         );
+    }
+
+    private Ward findClosestWard(double lat, double lng) {
+        try {
+            List<Ward> wards = wardRepository.findAll();
+            if (wards.isEmpty()) return null;
+            
+            Ward closestWard = null;
+            double minDistance = Double.MAX_VALUE;
+            
+            for (Ward w : wards) {
+                if (w.getLatitude() != null && w.getLongitude() != null) {
+                    double dist = calculateDistance(
+                            lat, lng, 
+                            w.getLatitude().doubleValue(), 
+                            w.getLongitude().doubleValue()
+                    );
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        closestWard = w;
+                    }
+                }
+            }
+            return closestWard;
+        } catch (Exception ex) {
+            log.warn("Failed to dynamically resolve closest ward: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        double theta = lon1 - lon2;
+        double dist = Math.sin(Math.toRadians(lat1)) * Math.sin(Math.toRadians(lat2))
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.cos(Math.toRadians(theta));
+        dist = Math.acos(dist);
+        dist = Math.toDegrees(dist);
+        dist = dist * 60 * 1.1515 * 1.609344;
+        return dist;
     }
 }

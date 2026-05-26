@@ -1,417 +1,334 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@hooks/useAuth'
-import { useNotification } from '@hooks/useNotification'
+
+const MOCK_NOTIFICATIONS = [
+  {
+    id: 1,
+    type: 'alert',
+    icon: 'warning',
+    iconColor: '#dc2626',
+    iconBg: '#fee2e2',
+    title: 'Urgent: Water Main Break in Sector 7',
+    time: '2 min ago',
+    timestamp: new Date(Date.now() - 2 * 60 * 1000),
+    desc: 'Immediate action required. Dispatch repair crew and notify residents within a 2-block radius of the intersection.',
+    unread: true,
+    category: 'alert',
+    priority: 'CRITICAL',
+    link: '/officer/dashboard',
+  },
+  {
+    id: 2,
+    type: 'assignment',
+    icon: 'assignment_ind',
+    iconColor: '#1e40af',
+    iconBg: '#dbeafe',
+    title: 'New Complaint Assigned: #CP-9821',
+    time: '15 min ago',
+    timestamp: new Date(Date.now() - 15 * 60 * 1000),
+    desc: 'Citizen reports illegal dumping near the Central Park trailhead. Assigned to your queue by the system.',
+    unread: true,
+    category: 'assignment',
+    priority: 'HIGH',
+    link: '/officer/dashboard',
+  },
+  {
+    id: 3,
+    type: 'update',
+    icon: 'update',
+    iconColor: '#059669',
+    iconBg: '#d1fae5',
+    title: 'Case #CP-9822 Status Changed to Resolved',
+    time: '3 hr ago',
+    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
+    desc: "The status of 'Public Lighting Malfunction' has been moved from In Progress to Resolved.",
+    unread: false,
+    category: 'update',
+    link: '/citizen/complaints/9822',
+  },
+  {
+    id: 4,
+    type: 'system',
+    icon: 'campaign',
+    iconColor: '#7c3aed',
+    iconBg: '#ede9fe',
+    title: 'System Maintenance Scheduled',
+    time: '5 hr ago',
+    timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000),
+    desc: 'The CivicPulse portal will be undergoing scheduled maintenance on June 1, 2026 from 2:00 AM to 4:00 AM IST.',
+    unread: false,
+    category: 'system',
+  },
+  {
+    id: 5,
+    type: 'assignment',
+    icon: 'assignment_turned_in',
+    iconColor: '#1e40af',
+    iconBg: '#dbeafe',
+    title: 'Complaint #CP-9815 Claimed by Officer',
+    time: '1 day ago',
+    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    desc: 'Your complaint about the street light outage on Oak Lane has been picked up by Officer Smith and is now in progress.',
+    unread: false,
+    category: 'update',
+    link: '/citizen/complaints/9815',
+  },
+  {
+    id: 6,
+    type: 'alert',
+    icon: 'emergency',
+    iconColor: '#b45309',
+    iconBg: '#fef3c7',
+    title: 'SLA Warning: Case #CP-9819 Approaching Deadline',
+    time: '2 days ago',
+    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    desc: 'The SLA deadline for the Pothole Hazard case on Ring Road is approaching in 4 hours. Please take action.',
+    unread: false,
+    category: 'alert',
+    priority: 'HIGH',
+    link: '/officer/complaints/9819',
+  },
+]
+
+const CATEGORY_FILTERS = [
+  { key: 'all', label: 'All', icon: 'inbox' },
+  { key: 'alert', label: 'Alerts', icon: 'warning' },
+  { key: 'assignment', label: 'Assignments', icon: 'assignment_ind' },
+  { key: 'update', label: 'Updates', icon: 'update' },
+  { key: 'system', label: 'System', icon: 'campaign' },
+]
+
+function timeAgo(timestamp) {
+  const now = new Date()
+  const diff = now - timestamp
+  const mins = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins} min ago`
+  if (hours < 24) return `${hours} hr ago`
+  return `${days} day${days > 1 ? 's' : ''} ago`
+}
 
 export function NotificationCenter() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { success } = useNotification()
+  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS)
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false)
 
-  // Dynamic state for persistent mock alerts/activities
-  const [feed, setFeed] = useState([
-    {
-      id: 1,
-      type: 'alert',
-      icon: 'warning',
-      iconBg: 'bg-error text-white',
-      title: 'Urgent: Water Main Break in Sector 7',
-      time: '2 mins ago',
-      desc: 'Immediate action required. Dispatch repair crew and notify residents within a 2-block radius of the intersection.',
-      unread: true,
-      priority: 'High Priority',
-      link: '/officer/dashboard'
-    },
-    {
-      id: 2,
-      type: 'assignment',
-      icon: 'assignment_ind',
-      iconBg: 'bg-secondary-container text-on-secondary-container',
-      title: 'New Complaint Assigned: #CP-9821',
-      time: '15 mins ago',
-      desc: 'Citizen reports illegal dumping near the Central Park trailhead. Assigned to your queue by Officer Chen.',
-      unread: true,
-      link: '/officer/dashboard'
-    },
-    {
-      id: 3,
-      type: 'mention',
-      icon: 'mention', // represented by user avatar
-      title: 'Sarah Mitchell mentioned you',
-      time: '1 hour ago',
-      desc: '"I\'ve updated the audit logs for the last week. @Officer, can you double-check the Sector 7 entries?"',
-      unread: true,
-      isMention: true,
-      avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB3lmKi3M9nGMF9HAAo5GoNlVJSCUm00rp-jTCB2pS7__KY6cuEdoDMOnR-EQmkcQFAhWsPfcJIFYz_RbYJhKNejEBVxlQPnigrEQSmLR16F0D2wHepsEPrPKEyfxJfx7tejtErl1JFQRevoXMlMvcgZ1eLAIJB8HzBQXY6HwudgHC1TQ_DM5uMbLpp5O0BHQr3qDlq9InFTH2TQMypeTrOGIzECiITFI8A7R-9QL1-kKrezYThPKtWX8_J74AEN-x2l0nCTCS_Oq0',
-      replyable: true
-    },
-    {
-      id: 4,
-      type: 'update',
-      icon: 'update',
-      iconBg: 'bg-tertiary-fixed text-on-tertiary-fixed-variant',
-      title: 'Case #CP-9822 Status Changed',
-      time: '3 hours ago',
-      desc: 'The status of \'Public Lighting Malfunction\' has been moved from In Progress to Resolved.',
-      unread: false,
-      link: '/citizen/dashboard'
-    },
-    {
-      id: 5,
-      type: 'activity',
-      icon: 'description',
-      iconBg: 'bg-surface-container-highest text-on-surface-variant',
-      title: 'Monthly Analytics Report Ready',
-      time: '5 hours ago',
-      desc: 'The August performance summary is now available for review in the Department Analytics tab.',
-      unread: false,
-      link: '/admin/dashboard'
-    }
-  ])
-
-  const [activeTab, setActiveTab] = useState('all') // 'all', 'unread', 'mentions', 'alerts'
-  const [replyInputId, setReplyInputId] = useState(null)
-  const [replyText, setReplyText] = useState('')
-
-  const handleMarkAllRead = () => {
-    setFeed(prev => prev.map(item => ({ ...item, unread: false })))
-    success('All alerts marked as read.')
-  }
-
-  const handleMarkIndividualRead = (id) => {
-    setFeed(prev => prev.map(item => item.id === id ? { ...item, unread: false } : item))
-  }
-
-  const handleDelete = (id, e) => {
-    e.stopPropagation()
-    setFeed(prev => prev.filter(item => item.id !== id))
-    success('Alert cleared from feed.')
-  }
-
-  const handleSendReply = (id) => {
-    if (!replyText.trim()) return
-    success('Reply sent successfully!')
-    setReplyInputId(null)
-    setReplyText('')
-  }
-
-  // Filter feed based on active tab
-  const filteredFeed = feed.filter(item => {
-    if (activeTab === 'unread') return item.unread
-    if (activeTab === 'mentions') return item.isMention
-    if (activeTab === 'alerts') return item.type === 'alert'
+  const filtered = notifications.filter(n => {
+    if (activeCategory !== 'all' && n.category !== activeCategory) return false
+    if (showUnreadOnly && !n.unread) return false
     return true
   })
 
-  const counts = {
-    all: feed.length,
-    unread: feed.filter(item => item.unread).length,
-    mentions: feed.filter(item => item.isMention).length,
-    alerts: feed.filter(item => item.type === 'alert').length
+  const unreadCount = notifications.filter(n => n.unread).length
+
+  const markAsRead = (id) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, unread: false } : n))
   }
 
-  const isOfficerOrAdmin = user?.role === 'OFFICER' || user?.role === 'ADMIN'
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })))
+  }
+
+  const deleteNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }
+
+  const priorityBadge = {
+    CRITICAL: { label: 'Critical', bg: '#fee2e2', color: '#991b1b' },
+    HIGH: { label: 'High', bg: '#ffedd5', color: '#9a3412' },
+  }
 
   return (
-    <div className="bg-background text-on-background min-h-screen flex flex-col font-body-md text-left">
-      <div className="flex flex-grow relative">
-        
-        {/* SHARED COMMAND SIDEBAR Navigation for Officers and Admins */}
-        {isOfficerOrAdmin && (
-          <aside className="hidden md:flex h-[calc(100vh-64px)] w-72 flex-col bg-surface-container-low border-r border-outline-variant fixed left-0 top-16 p-md gap-sm z-30">
-            <div className="flex items-center gap-md p-md mb-md">
-              <div className="h-10 w-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
-                <span className="material-symbols-outlined font-bold">shield</span>
-              </div>
-              <div>
-                <h2 className="font-label-lg text-label-lg text-on-surface font-bold">
-                  {user?.role === 'ADMIN' ? 'Admin Portal' : 'Officer Portal'}
-                </h2>
-                <p className="text-xs text-on-surface-variant">Central District</p>
-              </div>
-            </div>
+    <div style={{ background: 'var(--gov-surface)', minHeight: 'calc(100vh - 56px)' }}>
+      <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 animate-fade-in">
 
-            <nav className="flex flex-col gap-xs flex-grow">
-              <Link 
-                to={user?.role === 'ADMIN' ? '/admin/dashboard' : '/officer/dashboard'} 
-                className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-              >
-                <span className="material-symbols-outlined">dashboard</span>
-                <span className="font-label-md text-label-md">Dashboard</span>
-              </Link>
-
-              {user?.role === 'ADMIN' ? (
-                <>
-                  <Link 
-                    to="/admin/departments" 
-                    className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-                  >
-                    <span className="material-symbols-outlined">domain</span>
-                    <span className="font-label-md text-label-md">Manage Departments</span>
-                  </Link>
-
-                  <Link 
-                    to="/admin/officers" 
-                    className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-                  >
-                    <span className="material-symbols-outlined">badge</span>
-                    <span className="font-label-md text-label-md">Manage Officers</span>
-                  </Link>
-
-                  <Link 
-                    to="/admin/wards" 
-                    className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-                  >
-                    <span className="material-symbols-outlined">map</span>
-                    <span className="font-label-md text-label-md">Manage Wards</span>
-                  </Link>
-                </>
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-black" style={{ color: 'var(--gov-navy)' }}>Notification Center</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {unreadCount > 0 ? (
+                <span>You have <span className="font-bold" style={{ color: 'var(--gov-navy)' }}>{unreadCount} unread</span> notifications.</span>
               ) : (
-                <Link 
-                  to="/officer/dashboard" 
-                  className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-                >
-                  <span className="material-symbols-outlined">triage</span>
-                  <span className="font-label-md text-label-md">Incident Triage Queue</span>
-                </Link>
+                'All notifications read. You\'re up to date!'
               )}
-
-              <Link 
-                to="/notifications" 
-                className="flex items-center gap-md px-md py-3 bg-secondary-container text-on-secondary-container rounded-lg font-bold transition-all duration-200 shadow-sm"
+            </p>
+          </div>
+          <div className="flex gap-3">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-all hover:shadow-sm"
+                style={{ borderColor: 'var(--gov-border)', color: 'var(--gov-navy)', background: 'white' }}
               >
-                <span className="material-symbols-outlined">notifications</span>
-                <span className="font-label-md text-label-md font-bold">Alert Dispatch Center</span>
-              </Link>
-            </nav>
-
-            <div className="flex flex-col gap-xs pt-md border-t border-outline-variant mt-md">
-              <div className="px-md py-xs text-xs text-outline font-bold uppercase">System Health</div>
-              <div className="px-md py-sm flex items-center justify-between text-xs text-on-surface-variant">
-                <span>Dispatcher Gateway</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-              </div>
-            </div>
-          </aside>
-        )}
-
-        {/* MAIN FEED CANVAS */}
-        <main className={`flex-grow ${isOfficerOrAdmin ? 'md:pl-72' : ''} p-md md:p-xl bg-slate-50 min-h-[calc(100vh-64px)]`}>
-          <div className="max-w-3xl mx-auto">
-            
-            {/* Header section with actions */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-md mb-lg">
-              <div>
-                <div className="flex items-center gap-sm text-error mb-xs">
-                  <span className="material-symbols-outlined text-[20px] font-bold" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
-                  <span className="font-label-md text-label-md uppercase tracking-wider font-bold">System Alerts Active</span>
-                </div>
-                <h1 className="font-headline-lg text-headline-lg text-primary font-bold">Notification &amp; Alert Center</h1>
-                <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
-                  Review system updates, dispatcher assignments, and real-time field annotations.
-                </p>
-              </div>
-              
-              <button 
-                onClick={handleMarkAllRead}
-                className="flex items-center gap-sm text-primary hover:bg-primary-container/10 px-md py-sm rounded-lg transition-colors font-label-lg text-label-lg group cursor-pointer bg-transparent border-none"
-              >
-                <span className="material-symbols-outlined group-hover:rotate-12 transition-transform">done_all</span> Mark all as read
+                <span className="material-symbols-outlined text-sm">done_all</span>
+                Mark All Read
               </button>
-            </div>
-
-            {/* Metric Tabs Bento Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-sm mb-lg">
-              
-              <button 
-                onClick={() => setActiveTab('all')}
-                className={`flex flex-col items-center justify-center p-md rounded-xl border transition-all shadow-sm cursor-pointer ${activeTab === 'all' ? 'bg-primary border-primary text-white' : 'bg-white border-outline-variant text-on-surface hover:border-primary'}`}
-              >
-                <span className="font-label-lg text-xs font-bold uppercase tracking-wider">All</span>
-                <span className="font-headline-md text-xl font-bold mt-xs">{counts.all}</span>
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('unread')}
-                className={`flex flex-col items-center justify-center p-md rounded-xl border transition-all shadow-sm cursor-pointer ${activeTab === 'unread' ? 'bg-primary border-primary text-white' : 'bg-white border-outline-variant text-on-surface hover:border-primary'}`}
-              >
-                <span className="font-label-lg text-xs font-bold uppercase tracking-wider">Unread</span>
-                <span className="font-headline-md text-xl font-bold mt-xs">{counts.unread}</span>
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('mentions')}
-                className={`flex flex-col items-center justify-center p-md rounded-xl border transition-all shadow-sm cursor-pointer ${activeTab === 'mentions' ? 'bg-primary border-primary text-white' : 'bg-white border-outline-variant text-on-surface hover:border-primary'}`}
-              >
-                <span className="font-label-lg text-xs font-bold uppercase tracking-wider">Mentions</span>
-                <span className="font-headline-md text-xl font-bold mt-xs">{counts.mentions}</span>
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('alerts')}
-                className={`flex flex-col items-center justify-center p-md rounded-xl border transition-all shadow-sm cursor-pointer ${activeTab === 'alerts' ? 'bg-primary border-primary text-white' : 'bg-white border-outline-variant text-on-surface hover:border-primary'}`}
-              >
-                <span className="font-label-lg text-xs font-bold uppercase tracking-wider">Alerts</span>
-                <span className="font-headline-md text-xl font-bold mt-xs">{counts.alerts}</span>
-              </button>
-
-            </div>
-
-            {/* RENDERED FEED CARDS WITH ANIMATIONS */}
-            <div className="flex flex-col gap-sm">
-              <AnimatePresence initial={false}>
-                {filteredFeed.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center py-20 bg-white border border-outline-variant rounded-xl text-on-surface-variant flex flex-col items-center justify-center"
-                  >
-                    <span className="material-symbols-outlined text-4xl text-outline mb-sm">notifications_off</span>
-                    <p className="font-bold text-headline-sm">No notifications found</p>
-                    <p className="text-xs text-outline mt-xs">You are completely caught up with all dispatcher events!</p>
-                  </motion.div>
-                ) : (
-                  filteredFeed.map((item) => (
-                    <motion.div 
-                      key={item.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.16 }}
-                      onClick={() => handleMarkIndividualRead(item.id)}
-                      className={`relative border p-md rounded-xl transition-all flex flex-col gap-md text-left group hover:shadow-md cursor-pointer ${item.unread ? 'bg-white border-primary border-l-4' : 'bg-white/80 border-outline-variant opacity-85'} ${item.type === 'alert' && item.unread ? 'bg-error-container/10 border-error' : ''}`}
-                    >
-                      <div className="flex gap-md items-start">
-                        
-                        {/* Icon Backplane */}
-                        {item.isMention ? (
-                          <div className="h-11 w-11 rounded-full overflow-hidden shrink-0 border border-outline-variant">
-                            <img className="h-full w-full object-cover" alt="Avatar" src={item.avatar} />
-                          </div>
-                        ) : (
-                          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 shadow-inner ${item.iconBg || 'bg-slate-100 text-primary'}`}>
-                            <span className="material-symbols-outlined font-bold text-[20px]">{item.icon}</span>
-                          </div>
-                        )}
-
-                        {/* Content text */}
-                        <div className="flex-grow min-w-0 text-left">
-                          <div className="flex justify-between items-start gap-md flex-wrap">
-                            <h3 className="font-bold text-primary truncate max-w-sm md:max-w-md">{item.title}</h3>
-                            <span className="text-[11px] text-outline font-medium shrink-0">{item.time}</span>
-                          </div>
-                          
-                          <p className="text-xs text-on-surface-variant leading-relaxed mt-sm">
-                            {item.desc}
-                          </p>
-
-                          {/* Action deep-links or reply options */}
-                          <div className="flex items-center gap-md mt-md flex-wrap">
-                            {item.link && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  navigate(item.link)
-                                }}
-                                className="text-xs font-bold text-primary hover:underline flex items-center gap-xs cursor-pointer bg-transparent border-none p-0"
-                              >
-                                Access Incident Details <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                              </button>
-                            )}
-
-                            {item.priority && (
-                              <span className="bg-error/15 text-error px-sm py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                {item.priority}
-                              </span>
-                            )}
-
-                            {item.replyable && (
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setReplyInputId(replyInputId === item.id ? null : item.id)
-                                }}
-                                className="bg-slate-100 text-primary px-md py-sm rounded-lg font-bold text-xs hover:bg-slate-200 transition-colors cursor-pointer border-none"
-                              >
-                                {replyInputId === item.id ? 'Cancel Reply' : 'Reply to Comment'}
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Expandable Reply text area */}
-                          {replyInputId === item.id && (
-                            <div className="mt-md pt-md border-t border-outline-variant/40 flex gap-sm items-start">
-                              <textarea 
-                                value={replyText}
-                                onChange={(e) => setReplyText(e.target.value)}
-                                placeholder="Type a reply to team thread..."
-                                className="w-full border border-outline-variant focus:border-primary p-md rounded-lg text-xs h-16 resize-none outline-none"
-                              />
-                              <button 
-                                onClick={() => handleSendReply(item.id)}
-                                className="p-md bg-primary text-on-primary hover:opacity-90 rounded-lg flex items-center justify-center shrink-0 cursor-pointer shadow border-none"
-                              >
-                                <span className="material-symbols-outlined text-sm font-bold">send</span>
-                              </button>
-                            </div>
-                          )}
-
-                        </div>
-
-                        {/* Unread circle dot */}
-                        {item.unread && (
-                          <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
-                        )}
-                        
-                      </div>
-
-                      {/* Clear Alert Trash button visible on hover */}
-                      <div className="absolute top-md right-md opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                        <button 
-                          onClick={(e) => handleDelete(item.id, e)}
-                          className="p-sm bg-white border border-outline-variant/60 rounded-full text-outline hover:text-error hover:border-error transition-all shadow-sm flex items-center justify-center cursor-pointer"
-                          title="Delete alert"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                      </div>
-
-                    </motion.div>
-                  ))
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Load older button */}
-            {feed.length > 0 && (
-              <div className="mt-xl flex justify-center pb-xl">
-                <button className="flex items-center gap-sm px-xl py-md border border-outline text-outline rounded-full hover:bg-slate-100 transition-all font-label-lg font-bold text-xs tracking-wider cursor-pointer bg-transparent">
-                  Load Older Notifications
-                  <span className="material-symbols-outlined text-md">expand_more</span>
-                </button>
-              </div>
             )}
-
-          </div>
-        </main>
-      </div>
-
-      {/* FOOTER COHESIVE BAR */}
-      <footer className={`w-full py-lg px-margin-desktop bg-slate-900 text-slate-300 border-t border-slate-800 z-40 select-none ${isOfficerOrAdmin ? 'md:pl-72' : ''}`}>
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-center w-full">
-          <div className="mb-md md:mb-0 text-left">
-            <span className="font-label-lg text-label-lg font-bold text-white tracking-wider">Civic Pulse Governance Panel</span>
-            <p className="text-xs opacity-75 mt-1">© 2026 Civic Pulse Government Solutions. All rights reserved.</p>
-          </div>
-          <div className="flex flex-wrap gap-lg text-xs font-bold">
-            <a className="hover:text-white transition-colors cursor-pointer" href="#" onClick={(e) => e.preventDefault()}>Privacy Policy</a>
-            <a className="hover:text-white transition-colors cursor-pointer" href="#" onClick={(e) => e.preventDefault()}>Terms of Service</a>
-            <a className="hover:text-white transition-colors cursor-pointer" href="#" onClick={(e) => e.preventDefault()}>System Compliance</a>
           </div>
         </div>
-      </footer>
 
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 mb-5">
+          {CATEGORY_FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setActiveCategory(f.key)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all border"
+              style={{
+                background: activeCategory === f.key ? 'var(--gov-navy)' : 'white',
+                color: activeCategory === f.key ? 'white' : 'var(--gov-text-muted)',
+                borderColor: activeCategory === f.key ? 'var(--gov-navy)' : 'var(--gov-border)',
+              }}
+            >
+              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>{f.icon}</span>
+              {f.label}
+              {f.key === 'all' && notifications.length > 0 && (
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                  style={{
+                    background: activeCategory === 'all' ? 'rgba(255,255,255,0.2)' : 'rgba(10,35,66,0.08)',
+                    color: activeCategory === 'all' ? 'white' : 'var(--gov-navy)',
+                  }}
+                >
+                  {notifications.length}
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all border ml-auto"
+            style={{
+              background: showUnreadOnly ? '#dbeafe' : 'white',
+              color: showUnreadOnly ? '#1e40af' : 'var(--gov-text-muted)',
+              borderColor: showUnreadOnly ? '#bfdbfe' : 'var(--gov-border)',
+            }}
+          >
+            <span className="material-symbols-outlined text-sm">filter_list</span>
+            Unread Only
+          </button>
+        </div>
+
+        {/* Notifications list */}
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border p-16 text-center" style={{ borderColor: 'var(--gov-border)' }}>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(10,35,66,0.06)' }}>
+              <span className="material-symbols-outlined text-3xl" style={{ color: 'var(--gov-text-light)' }}>notifications_off</span>
+            </div>
+            <p className="font-bold text-base mb-1" style={{ color: 'var(--gov-navy)' }}>No Notifications</p>
+            <p className="text-sm text-gray-500">
+              {showUnreadOnly ? 'No unread notifications in this category.' : 'No notifications in this category.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(notification => (
+              <div
+                key={notification.id}
+                className={`bg-white rounded-2xl border transition-all hover:shadow-md group relative ${notification.unread ? 'border-l-4' : ''}`}
+                style={{
+                  borderColor: notification.unread ? notification.iconColor : 'var(--gov-border)',
+                  borderLeftColor: notification.unread ? notification.iconColor : undefined,
+                }}
+              >
+                <div className="p-5">
+                  <div className="flex gap-4">
+                    {/* Icon */}
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                      style={{ background: notification.iconBg }}
+                    >
+                      <span
+                        className="material-symbols-outlined text-xl"
+                        style={{ color: notification.iconColor, fontVariationSettings: "'FILL' 1" }}
+                      >
+                        {notification.icon}
+                      </span>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`text-sm font-bold ${notification.unread ? '' : 'text-gray-700'}`} style={{ color: notification.unread ? 'var(--gov-navy)' : undefined }}>
+                            {notification.title}
+                          </p>
+                          {notification.unread && (
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: notification.iconColor }} />
+                          )}
+                          {notification.priority && priorityBadge[notification.priority] && (
+                            <span
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
+                              style={{ background: priorityBadge[notification.priority].bg, color: priorityBadge[notification.priority].color }}
+                            >
+                              {priorityBadge[notification.priority].label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-gray-400 whitespace-nowrap">{timeAgo(notification.timestamp)}</span>
+                          {/* Actions (hover) */}
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {notification.unread && (
+                              <button
+                                onClick={() => markAsRead(notification.id)}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                                title="Mark as read"
+                              >
+                                <span className="material-symbols-outlined text-sm text-gray-400">done</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => deleteNotification(notification.id)}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors"
+                              title="Delete"
+                            >
+                              <span className="material-symbols-outlined text-sm text-gray-400 hover:text-red-500">close</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="text-sm text-gray-500 leading-relaxed mb-3">{notification.desc}</p>
+
+                      {/* CTA */}
+                      {notification.link && (
+                        <button
+                          onClick={() => {
+                            markAsRead(notification.id)
+                            navigate(notification.link)
+                          }}
+                          className="flex items-center gap-1.5 text-xs font-bold hover:underline transition-colors"
+                          style={{ color: notification.iconColor }}
+                        >
+                          View Details
+                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bottom info */}
+        <div
+          className="mt-8 rounded-2xl border p-4 text-center"
+          style={{ background: 'white', borderColor: 'var(--gov-border)' }}
+        >
+          <p className="text-xs text-gray-400">
+            Notifications are retained for 30 days · <button className="underline hover:text-gray-600">Manage preferences</button>
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

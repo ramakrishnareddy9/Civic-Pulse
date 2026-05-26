@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useNotification } from '@hooks/useNotification'
 import { get } from '@/api/client'
 
@@ -59,78 +59,59 @@ export function AdminDashboard() {
   ]
 
   return (
-    <div className="bg-background text-on-background min-h-screen flex flex-col font-body-md text-left">
+    <div style={{ background: '#f8f9fc', minHeight: 'calc(100vh - 56px)' }} className="text-on-background flex flex-col font-body-md text-left">
       <div className="flex flex-grow relative">
         
-        {/* SIDEBAR NAVIGATION - FIXED & SLICK */}
-        <aside className="hidden md:flex h-[calc(100vh-64px)] w-72 flex-col bg-surface-container-low border-r border-outline-variant fixed left-0 top-16 p-md gap-sm z-30">
-          <div className="flex items-center gap-md p-md mb-md">
-            <div className="h-10 w-10 bg-primary-container rounded-lg flex items-center justify-center text-on-primary-container">
-              <span className="material-symbols-outlined font-bold">analytics</span>
+        {/* SIDEBAR NAVIGATION */}
+        <aside
+          className="hidden md:flex h-[calc(100vh-56px)] w-64 flex-col border-r fixed left-0 top-14 p-4 gap-2"
+          style={{ background: 'white', borderColor: 'var(--gov-border)', zIndex: 30 }}
+        >
+          <div className="flex items-center gap-3 px-2 py-3 mb-2">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(10,35,66,0.07)' }}>
+              <span className="material-symbols-outlined text-lg" style={{ color: 'var(--gov-navy)', fontVariationSettings: "'FILL' 1" }}>analytics</span>
             </div>
             <div>
-              <h2 className="font-label-lg text-label-lg text-on-surface font-bold">Admin Console</h2>
-              <p className="text-xs text-on-surface-variant">Metropolitan Command</p>
+              <h2 className="text-sm font-black" style={{ color: 'var(--gov-navy)' }}>Admin Console</h2>
+              <p className="text-[10px]" style={{ color: 'var(--gov-text-muted)' }}>Metropolitan Command</p>
             </div>
           </div>
 
-          <nav className="flex flex-col gap-xs flex-grow">
-            <Link 
-              to="/admin/dashboard" 
-              className="flex items-center gap-md px-md py-3 bg-secondary-container text-on-secondary-container rounded-lg font-bold transition-all duration-200 shadow-sm"
-            >
-              <span className="material-symbols-outlined">dashboard</span>
-              <span className="font-label-md text-label-md">KPI Dashboard</span>
-            </Link>
-
-            <Link 
-              to="/admin/departments" 
-              className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-            >
-              <span className="material-symbols-outlined">domain</span>
-              <span className="font-label-md text-label-md">Manage Departments</span>
-            </Link>
-
-            <Link 
-              to="/admin/officers" 
-              className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-            >
-              <span className="material-symbols-outlined">badge</span>
-              <span className="font-label-md text-label-md">Manage Officers</span>
-            </Link>
-
-            <Link 
-              to="/admin/wards" 
-              className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-            >
-              <span className="material-symbols-outlined">map</span>
-              <span className="font-label-md text-label-md">Manage Wards</span>
-            </Link>
-
-            <Link 
-              to="/notifications" 
-              className="flex items-center gap-md px-md py-3 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface rounded-lg transition-all duration-200"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="font-label-md text-label-md">Alert Dispatch Center</span>
-            </Link>
+          <nav className="flex flex-col gap-1 flex-grow">
+            {[
+              { to: '/admin/dashboard', label: 'KPI Dashboard', icon: 'dashboard' },
+              { to: '/admin/departments', label: 'Departments', icon: 'domain' },
+              { to: '/admin/officers', label: 'Officers', icon: 'badge' },
+              { to: '/admin/wards', label: 'Wards', icon: 'map' },
+              { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+            ].map(item => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`sidebar-link ${location?.pathname === item.to ? 'active' : ''}`}
+              >
+                <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>{item.icon}</span>
+                <span className="text-sm">{item.label}</span>
+              </Link>
+            ))}
           </nav>
 
-          <div className="flex flex-col gap-xs pt-md border-t border-outline-variant mt-md">
-            <div className="px-md py-xs text-xs text-outline font-bold uppercase">System Health</div>
-            <div className="px-md py-sm flex items-center justify-between text-xs text-on-surface-variant">
-              <span>Database Server</span>
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-            </div>
-            <div className="px-md py-sm flex items-center justify-between text-xs text-on-surface-variant">
-              <span>ElasticSearch Server</span>
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
-            </div>
+          <div className="pt-3 border-t space-y-1 mt-auto" style={{ borderColor: 'var(--gov-border)' }}>
+            <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">System Health</div>
+            {[
+              { label: 'Database Server', status: 'online' },
+              { label: 'Notification Service', status: 'online' },
+            ].map(s => (
+              <div key={s.label} className="px-3 py-2 flex items-center justify-between text-xs" style={{ color: 'var(--gov-text-muted)' }}>
+                <span>{s.label}</span>
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              </div>
+            ))}
           </div>
         </aside>
 
         {/* MAIN CANVAS BODY */}
-        <main className="flex-1 md:pl-72 p-md md:p-xl bg-slate-50 min-h-[calc(100vh-64px)] overflow-x-hidden">
+        <main className="flex-1 md:pl-64 p-4 md:p-8" style={{ background: '#f8f9fc', minHeight: 'calc(100vh - 56px)', overflowX: 'hidden' }}>
           
           {/* Header Action Row */}
           <header className="flex flex-col xl:flex-row xl:items-end justify-between gap-md mb-lg">

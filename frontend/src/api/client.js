@@ -11,7 +11,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 1000,
 })
 
 /**
@@ -103,7 +103,7 @@ const getMockData = (url) => {
   }
   
   if (cleanUrl.includes('/api/complaints/officer/')) {
-    return [
+    const list = [
       {
         id: 9821,
         title: 'Water Main Burst - 5th Ave',
@@ -111,10 +111,13 @@ const getMockData = (url) => {
         status: 'OPEN',
         priority: 'CRITICAL',
         category: 'Infrastructure',
-        ward: 'Ward 08',
+        ward: 'Ward 1 - Koramangala',
         createdAt: new Date(Date.now() - 120000).toISOString(),
         slaDueDate: new Date(Date.now() + 86400000).toISOString(),
-        images: ['https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80']
+        images: ['https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80'],
+        address: '5th Ave, Koramangala, Bengaluru, Karnataka 560034',
+        latitude: 12.9352,
+        longitude: 77.6245
       },
       {
         id: 9819,
@@ -123,12 +126,15 @@ const getMockData = (url) => {
         status: 'IN_PROGRESS',
         priority: 'MEDIUM',
         category: 'Infrastructure',
-        ward: 'Ward 02',
+        ward: 'Ward 2 - Indiranagar',
         createdAt: new Date(Date.now() - 900000).toISOString(),
         slaDueDate: new Date(Date.now() + 172800000).toISOString(),
         assignedTo: 'Officer James Smith',
         officerNotes: 'Assigned crew dispatched to assess depth and arrange cold mix patching.',
-        images: []
+        images: [],
+        address: '100 Feet Rd, Indiranagar, Bengaluru, Karnataka 560038',
+        latitude: 12.9784,
+        longitude: 77.6408
       },
       {
         id: 9815,
@@ -137,16 +143,31 @@ const getMockData = (url) => {
         status: 'OPEN',
         priority: 'LOW',
         category: 'Infrastructure',
-        ward: 'Ward 11',
+        ward: 'Ward 5 - Malleshwaram',
         createdAt: new Date(Date.now() - 2700000).toISOString(),
         slaDueDate: new Date(Date.now() + 259200000).toISOString(),
-        images: []
+        images: [],
+        address: '15th Cross Rd, Malleshwaram, Bengaluru, Karnataka 560003',
+        latitude: 13.0035,
+        longitude: 77.5728
       }
     ]
+    return {
+      content: list,
+      totalElements: list.length,
+      totalPages: 1,
+      size: 10,
+      number: 0,
+      numberOfElements: list.length
+    }
   }
   
-  if (cleanUrl.includes('/api/complaints/user/') || cleanUrl.endsWith('/api/complaints')) {
-    return [
+  if (
+    cleanUrl.includes('/api/complaints/user/') || 
+    cleanUrl.endsWith('/api/complaints') || 
+    cleanUrl.includes('/api/complaints?')
+  ) {
+    const list = [
       {
         id: 9821,
         title: 'Water Main Burst - 5th Ave',
@@ -154,10 +175,13 @@ const getMockData = (url) => {
         status: 'OPEN',
         priority: 'CRITICAL',
         category: 'Infrastructure',
-        ward: 'Ward 08',
+        ward: 'Ward 1 - Koramangala',
         createdAt: new Date(Date.now() - 120000).toISOString(),
         slaDueDate: new Date(Date.now() + 86400000).toISOString(),
-        images: ['https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80']
+        images: ['https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80'],
+        address: '5th Ave, Koramangala, Bengaluru, Karnataka 560034',
+        latitude: 12.9352,
+        longitude: 77.6245
       },
       {
         id: 9819,
@@ -166,12 +190,15 @@ const getMockData = (url) => {
         status: 'IN_PROGRESS',
         priority: 'MEDIUM',
         category: 'Infrastructure',
-        ward: 'Ward 02',
+        ward: 'Ward 2 - Indiranagar',
         createdAt: new Date(Date.now() - 900000).toISOString(),
         slaDueDate: new Date(Date.now() + 172800000).toISOString(),
         assignedTo: 'Officer James Smith',
         officerNotes: 'Assigned crew dispatched to assess depth and arrange cold mix patching.',
-        images: []
+        images: [],
+        address: '100 Feet Rd, Indiranagar, Bengaluru, Karnataka 560038',
+        latitude: 12.9784,
+        longitude: 77.6408
       },
       {
         id: 9815,
@@ -180,33 +207,69 @@ const getMockData = (url) => {
         status: 'OPEN',
         priority: 'LOW',
         category: 'Infrastructure',
-        ward: 'Ward 11',
+        ward: 'Ward 5 - Malleshwaram',
         createdAt: new Date(Date.now() - 2700000).toISOString(),
         slaDueDate: new Date(Date.now() + 259200000).toISOString(),
-        images: []
+        images: [],
+        address: '15th Cross Rd, Malleshwaram, Bengaluru, Karnataka 560003',
+        latitude: 13.0035,
+        longitude: 77.5728
       }
     ]
+    return {
+      content: list,
+      totalElements: list.length,
+      totalPages: 1,
+      size: 10,
+      number: 0,
+      numberOfElements: list.length
+    }
   }
 
   if (cleanUrl.match(/\/api\/complaints\/\d+/)) {
     const match = cleanUrl.match(/\/api\/complaints\/(\d+)/)
-    const id = match ? match[1] : '9821'
-    return {
-      id: Number(id),
+    const id = match ? Number(match[1]) : 9821
+    
+    let complaintData = {
+      id: id,
       title: 'Water Main Burst - 5th Ave',
       description: 'Heavy flooding reported at the intersection of 5th Ave and Maple St. Traffic blocked in both directions. Potential basement flooding in adjacent commercial units.',
       status: 'OPEN',
       priority: 'CRITICAL',
       category: 'Infrastructure',
-      ward: 'Ward 08',
+      ward: 'Ward 1 - Koramangala',
       createdAt: new Date(Date.now() - 3600000).toISOString(),
       slaDueDate: new Date(Date.now() + 86400000).toISOString(),
       submittedBy: 'citizen@civicpulse.gov.in',
       assignedTo: 'Officer James Smith',
       officerNotes: 'Assigned crew dispatched to assess depth and arrange cold mix patching.',
       images: ['https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80'],
-      location: 'Intersection of 5th Ave and Maple St'
+      address: '5th Ave, Koramangala, Bengaluru, Karnataka 560034',
+      latitude: 12.9352,
+      longitude: 77.6245
     }
+
+    if (id === 9819) {
+      complaintData.title = 'Pothole Hazard - Ring Road'
+      complaintData.description = 'Large pothole reported in the center lane of the southbound ring road. Two vehicles reported flat tires in the last hour.'
+      complaintData.status = 'IN_PROGRESS'
+      complaintData.priority = 'MEDIUM'
+      complaintData.ward = 'Ward 2 - Indiranagar'
+      complaintData.address = '100 Feet Rd, Indiranagar, Bengaluru, Karnataka 560038'
+      complaintData.latitude = 12.9784
+      complaintData.longitude = 77.6408
+    } else if (id === 9815) {
+      complaintData.title = 'Street Light Out - Oak Lane'
+      complaintData.description = 'Single street lamp flickering at the end of the cul-de-sac. Low traffic area, non-urgent maintenance request.'
+      complaintData.status = 'OPEN'
+      complaintData.priority = 'LOW'
+      complaintData.ward = 'Ward 5 - Malleshwaram'
+      complaintData.address = '15th Cross Rd, Malleshwaram, Bengaluru, Karnataka 560003'
+      complaintData.latitude = 13.0035
+      complaintData.longitude = 77.5728
+    }
+    
+    return complaintData
   }
 
   return null

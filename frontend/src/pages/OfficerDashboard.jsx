@@ -6,6 +6,7 @@ import { useAuth } from '@hooks/useAuth'
 import { useNotification } from '@hooks/useNotification'
 import { ROUTES } from '@utils/constants'
 import { subscribeTopic, disconnectSocket, connectSocket } from '@/services/socket'
+import CivicMap from '@components/common/CivicMap'
 
 export function OfficerDashboard() {
   const navigate = useNavigate()
@@ -118,8 +119,10 @@ export function OfficerDashboard() {
       inProgress: data.filter((c) => c.status === 'IN_PROGRESS').length,
       resolved: data.filter((c) => c.status === 'RESOLVED').length,
       slaBreaches: data.filter((c) => {
-        const isSlaBreach = new Date() > new Date(c.slaDueDate)
-        return isSlaBreach && c.status !== 'RESOLVED' && c.status !== 'CLOSED'
+        if (!c.slaDueDate) return false
+        const due = new Date(c.slaDueDate)
+        if (isNaN(due.getTime())) return false
+        return new Date() > due && c.status !== 'RESOLVED' && c.status !== 'CLOSED'
       }).length,
     })
   }
@@ -181,14 +184,11 @@ export function OfficerDashboard() {
     }
   }
 
-  // Generate deterministic mock coordinates for visual GIS plotting
-  const getMockCoordinates = (id) => {
-    const top = ((id * 17) % 55) + 20
-    const left = ((id * 31) % 65) + 15
-    return { top: `${top}%`, left: `${left}%` }
-  }
-
   const activeComplaint = complaints.find(c => c.id === selectedComplaintId) || complaints[0]
+
+  const mapCenter = activeComplaint && activeComplaint.latitude && activeComplaint.longitude
+    ? [activeComplaint.latitude, activeComplaint.longitude]
+    : [12.9716, 77.5946]
 
   const filteredComplaints = complaints.filter((c) => {
     // Priority filter (High means Critical or High, Claimed means IN_PROGRESS status)
@@ -243,7 +243,7 @@ export function OfficerDashboard() {
   }
 
   return (
-    <div className="bg-surface text-on-surface flex flex-col h-[calc(100vh-64px)] overflow-hidden font-body-md relative">
+    <div style={{ background: 'var(--gov-surface)', color: 'var(--gov-text)', minHeight: 'calc(100vh - 56px)' }} className="flex flex-col overflow-hidden font-body-md relative">
       
       {/* Styles for pulse ring and active borders */}
       <style dangerouslySetInnerHTML={{__html: `
@@ -270,14 +270,34 @@ export function OfficerDashboard() {
         }
       `}} />
 
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-4 py-3 border-b" style={{ background: 'white', borderColor: 'var(--gov-border)' }}>
+        {[
+          { label: 'Open Queue', value: stats.assigned, icon: 'inbox', color: '#d97706', bg: '#fef3c7' },
+          { label: 'In Progress', value: stats.inProgress, icon: 'autorenew', color: '#1e40af', bg: '#dbeafe' },
+          { label: 'Resolved', value: stats.resolved, icon: 'check_circle', color: '#166534', bg: '#dcfce7' },
+          { label: 'SLA Breaches', value: stats.slaBreaches, icon: 'warning', color: '#991b1b', bg: '#fee2e2' },
+        ].map((s, i) => (
+          <div key={i} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--gov-border)' }}>
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: s.bg }}>
+              <span className="material-symbols-outlined text-lg" style={{ color: s.color, fontVariationSettings: "'FILL' 1" }}>{s.icon}</span>
+            </div>
+            <div>
+              <p className="text-xl font-black leading-none" style={{ color: 'var(--gov-navy)' }}>{s.value}</p>
+              <p className="text-xs text-gray-500 font-medium">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Main Split-Screen Panel Container */}
-      <div className="flex flex-grow overflow-hidden">
+      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 56px - 80px - 40px)' }}>
         
         {/* LEFT COLUMN: Queue & Controls */}
-        <div className="w-full lg:w-1/2 flex flex-col border-r border-outline-variant bg-surface relative z-10">
+        <div className="w-full lg:w-1/2 flex flex-col border-r" style={{ borderColor: 'var(--gov-border)', background: 'white', position: 'relative', zIndex: 10 }}>
           
           {/* Header Controls, Search & Filter Toggles */}
-          <div className="p-md bg-white border-b border-outline-variant flex flex-col gap-md sticky top-0 shadow-sm z-20">
+          <div className="p-3 border-b flex flex-col gap-3 sticky top-0 shadow-sm" style={{ background: 'white', borderColor: 'var(--gov-border)', zIndex: 20 }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-sm">
                 <span className="material-symbols-outlined text-primary text-2xl">triage</span>
@@ -411,7 +431,7 @@ export function OfficerDashboard() {
               filteredComplaints.map((complaint) => {
                 const isSelected = complaint.id === selectedComplaintId
                 const priorityStyles = getPriorityClasses(complaint.priority)
-                const isSlaBreached = new Date() > new Date(complaint.slaDueDate) && complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED'
+                const isSlaBreached = complaint.slaDueDate && !isNaN(new Date(complaint.slaDueDate).getTime()) && new Date() > new Date(complaint.slaDueDate) && complaint.status !== 'RESOLVED' && complaint.status !== 'CLOSED'
 
                 return (
                   <div
@@ -506,102 +526,56 @@ export function OfficerDashboard() {
         </div>
 
         {/* RIGHT COLUMN: GIS Interactive Digital Map Frame */}
-        <div className="hidden lg:block w-1/2 relative bg-surface-dim overflow-hidden">
+        <div className="hidden lg:block w-1/2 relative bg-surface-dim overflow-hidden z-10">
           
-          {/* Street Map Backplane */}
-          <div className="absolute inset-0 z-0 select-none">
-            <img 
-              className="w-full h-full object-cover grayscale brightness-[0.95] opacity-70" 
-              alt="Digital Triage GIS Ward Map"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3ZMziYtsk0U50Ksc5fqTw3Pcmws__fq0gTm0j6K0Tfknd1PkNpXxmRtp4B7t1LHysO2AkadGYzowWlXzTvfu4m0WWg8L8GN9xtiJkJ1pRYPBlJOtEG_yEwQNDFp-a36y5AeTO-kThtusJzTZdRvmLOK_OD453i1WBdePb7hUXCbgaac_BuNILhf4xSNOx2a2O_F5JfDKHYNRYs67KE-CW-z1PnNGv-p8mDrMftzcfO1MpNRc8pJ6oT2MnoZS03Cr3BIVkvR_zL7k"
-            />
-          </div>
-
-          {/* DYNAMIC SCATTER PLOT INCIDENT PINS */}
-          {filteredComplaints.map((complaint) => {
-            const isSelected = complaint.id === selectedComplaintId
-            const priorityStyles = getPriorityClasses(complaint.priority)
-            const coords = getMockCoordinates(complaint.id)
-
-            return (
-              <div 
-                key={complaint.id}
-                style={{ top: coords.top, left: coords.left }}
-                onClick={() => setSelectedComplaintId(complaint.id)}
-                className="absolute z-10 transform -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-              >
-                <div className="relative flex items-center justify-center">
-                  {isSelected && (
-                    <div className="pulse-ring-active absolute w-8 h-8 bg-error rounded-full opacity-60 pointer-events-none" />
-                  )}
-                  <span className={`material-symbols-outlined text-3xl transition-transform duration-200 group-hover:scale-125 z-20 ${priorityStyles.pin}`} style={{ fontVariationSettings: "'FILL' 1" }}>
-                    location_on
-                  </span>
-                  
-                  {/* Tooltip Hover Overlay */}
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-primary text-on-primary px-md py-sm rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none whitespace-nowrap z-30 border border-white/20">
-                    <p className="font-label-md text-[10px] opacity-75 font-bold uppercase">{priorityStyles.label}</p>
-                    <p className="font-bold text-xs">CP-{complaint.id}: {complaint.title}</p>
-                    <p className="text-[10px] opacity-90 mt-xs">{complaint.ward} | {complaint.category}</p>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Interactive Floating Map Control Widgets */}
-          <div className="absolute bottom-md right-md flex flex-col gap-sm z-10">
-            <div className="flex flex-col bg-white rounded-lg shadow-lg border border-outline-variant overflow-hidden">
-              <button className="p-sm hover:bg-surface-container-high border-b border-outline-variant flex items-center justify-center cursor-pointer text-primary">
-                <span className="material-symbols-outlined">add</span>
-              </button>
-              <button className="p-sm hover:bg-surface-container-high flex items-center justify-center cursor-pointer text-primary">
-                <span className="material-symbols-outlined">remove</span>
-              </button>
-            </div>
-            <button className="bg-white p-sm rounded-lg shadow-lg border border-outline-variant hover:bg-surface-container-high flex items-center justify-center cursor-pointer text-primary">
-              <span className="material-symbols-outlined">my_location</span>
-            </button>
-          </div>
+          <CivicMap
+            center={mapCenter}
+            zoom={13}
+            interactive={false}
+            markers={filteredComplaints.filter(c => c.latitude && c.longitude)}
+            activeMarkerId={selectedComplaintId}
+            onMarkerClick={(id) => setSelectedComplaintId(id)}
+            height="100%"
+          />
 
           {/* TOP-LEFT FLOATING MAP LEGEND */}
-          <div className="absolute top-md left-md bg-white/95 backdrop-blur-md p-md rounded-xl border border-outline-variant/50 shadow-xl z-10 w-52 text-left">
-            <div className="flex items-center gap-xs mb-sm">
+          <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md p-4 rounded-xl border border-[#d0d7e3] shadow-xl z-[999] w-52 text-left">
+            <div className="flex items-center gap-2 mb-2">
               <span className="material-symbols-outlined text-primary text-[18px]">hub</span>
-              <h4 className="font-label-lg font-bold text-primary">Regional Dispatch units</h4>
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wider">Regional Dispatch units</h4>
             </div>
-            <div className="flex flex-col gap-sm border-t border-outline-variant/40 pt-sm">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-on-surface-variant font-medium">Main Ward Crew 1</span>
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <div className="flex flex-col gap-2 border-t border-[#eef1f6] pt-2">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-[#5a6a7e]">
+                <span>Main Ward Crew 1</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-on-surface-variant font-medium">Emergency Repair Unit</span>
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <div className="flex items-center justify-between text-[11px] font-semibold text-[#5a6a7e]">
+                <span>Emergency Repair Unit</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-on-surface-variant font-medium">Road Ops Team B</span>
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <div className="flex items-center justify-between text-[11px] font-semibold text-[#5a6a7e]">
+                <span>Road Ops Team B</span>
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
               </div>
             </div>
           </div>
 
           {/* FLOATING QUICK SUMMARY OF ACTIVE SELECTION */}
           {activeComplaint && (
-            <div className="absolute bottom-md left-md bg-white/95 backdrop-blur-md p-lg rounded-xl border border-primary/20 shadow-2xl z-10 max-w-sm text-left flex gap-md mui-card-shadow">
-              <div className="w-12 h-12 rounded-lg bg-primary/5 flex items-center justify-center shrink-0 border border-primary/10">
-                <span className="material-symbols-outlined text-primary text-2xl">info</span>
+            <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md p-4 rounded-xl border border-primary/20 shadow-2xl z-[999] max-w-sm text-left flex gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/5 flex items-center justify-center shrink-0 border border-primary/10 text-primary">
+                <span className="material-symbols-outlined text-2xl">info</span>
               </div>
               <div>
-                <span className="text-[10px] text-outline font-bold uppercase tracking-wider">Currently Triaged Target</span>
-                <h4 className="font-headline-sm text-sm font-bold text-primary mt-xs line-clamp-1">{activeComplaint.title}</h4>
-                <p className="text-xs text-on-surface-variant mt-xs line-clamp-2">{activeComplaint.description}</p>
-                <div className="flex items-center gap-md mt-md">
+                <span className="text-[9px] text-[#8896a6] font-bold uppercase tracking-wider">Currently Triaged Target</span>
+                <h4 className="text-xs font-bold text-primary mt-1 line-clamp-1">{activeComplaint.title}</h4>
+                <p className="text-[11px] text-[#5a6a7e] mt-1 line-clamp-2 leading-relaxed">{activeComplaint.description}</p>
+                <div className="flex items-center gap-3 mt-3">
                   <button 
                     onClick={() => navigate(`/officer/complaints/${activeComplaint.id}`)}
-                    className="text-xs font-bold text-primary hover:underline flex items-center gap-xs cursor-pointer"
+                    className="text-[11px] font-black text-primary hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    Open Case File <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    Open Case File <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                   </button>
                 </div>
               </div>
@@ -610,23 +584,26 @@ export function OfficerDashboard() {
         </div>
       </div>
 
-      {/* DASHBOARD BOTTOM STATS & FOOTER */}
-      <footer className="h-10 bg-primary-container text-on-primary-container px-md flex items-center justify-between text-[10px] font-bold uppercase tracking-widest shrink-0 select-none">
-        <div className="flex gap-lg items-center">
-          <span className="flex items-center gap-xs">
+      {/* DASHBOARD BOTTOM STATUS BAR */}
+      <footer
+        className="h-10 px-4 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest shrink-0 select-none"
+        style={{ background: 'var(--gov-navy-dark)', color: 'rgba(255,255,255,0.7)' }}
+      >
+        <div className="flex gap-4 items-center">
+          <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            DISPATCH SYSTEM STABLE
+            DISPATCH SYSTEM ACTIVE
           </span>
-          <span className="hidden md:inline">OFFICER: {user?.fullName || user?.email}</span>
+          <span className="hidden md:inline text-white/50">OFFICER: {user?.fullName || user?.email}</span>
         </div>
-        <div className="flex gap-md">
-          <span className="flex items-center gap-xs text-red-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-error" />
-            SLA Breached: {stats.slaBreaches}
+        <div className="flex gap-4">
+          <span className="flex items-center gap-1.5" style={{ color: stats.slaBreaches > 0 ? '#fca5a5' : 'rgba(255,255,255,0.5)' }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: stats.slaBreaches > 0 ? '#ef4444' : 'rgba(255,255,255,0.3)' }} />
+            SLA BREACHES: {stats.slaBreaches}
           </span>
-          <span className="flex items-center gap-xs text-amber-200">
+          <span className="flex items-center gap-1.5 text-amber-300">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            In Progress: {stats.inProgress}
+            IN PROGRESS: {stats.inProgress}
           </span>
         </div>
       </footer>

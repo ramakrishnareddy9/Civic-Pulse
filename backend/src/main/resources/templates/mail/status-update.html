@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Complaint Status Update</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fc;
+            color: #0d1b2a;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(10,35,66,0.08);
+            border: 1px solid #d0d7e3;
+        }
+        .header {
+            background: linear-gradient(135deg, #0a2342 0%, #1565c0 100%);
+            padding: 30px;
+            text-align: center;
+            border-bottom: 4px solid #c6a227;
+        }
+        .header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            margin: 0;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+        .header p {
+            color: #eef1f6;
+            font-size: 14px;
+            margin: 8px 0 0 0;
+            font-weight: 500;
+        }
+        .content {
+            padding: 35px 30px;
+        }
+        .content h2 {
+            font-size: 18px;
+            color: #0a2342;
+            margin-top: 0;
+            font-weight: 700;
+        }
+        .content p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #5a6a7e;
+            margin: 0 0 20px 0;
+        }
+        .card {
+            background-color: #f8f9fc;
+            border: 1px solid #d0d7e3;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .card-row {
+            display: flex;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #eef1f6;
+            padding-bottom: 8px;
+        }
+        .card-row:last-child {
+            margin-bottom: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .card-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #8896a6;
+            text-transform: uppercase;
+            width: 130px;
+            flex-shrink: 0;
+        }
+        .card-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0a2342;
+        }
+        .badge {
+            background-color: #0a2342;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-block;
+        }
+        .badge-status {
+            background-color: #1b5e20;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-block;
+            text-transform: uppercase;
+        }
+        .notes-box {
+            background-color: rgba(198, 162, 39, 0.05);
+            border-left: 4px solid #c6a227;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            font-style: italic;
+            color: #0a2342;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .footer {
+            background-color: #060f1e;
+            padding: 25px 30px;
+            text-align: center;
+            border-top: 1px solid #eef1f6;
+        }
+        .footer p {
+            font-size: 11px;
+            color: #8896a6;
+            margin: 0 0 8px 0;
+            font-weight: 500;
+        }
+        .footer p:last-child {
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>CIVIC PULSE</h1>
+            <p>MUNICIPAL GRIEVANCE & CITIZEN INTELLIGENCE PORTAL</p>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            <h2>Grievance Status Updated</h2>
+            <p>Dear <strong th:text="${citizenName}">Citizen</strong>,</p>
+            <p>The ward crew assigned to your report has registered a progress update. The triage tracking status of your ticket has been transitioned.</p>
+            
+            <!-- Details Card -->
+            <div class="card">
+                <div class="card-row">
+                    <div class="card-label">Ticket ID</div>
+                    <div class="card-value"><span class="badge" th:text="'#CP-' + ${complaintId}">#CP-1001</span></div>
+                </div>
+                <div class="card-row">
+                    <div class="card-label">Incident Title</div>
+                    <div class="card-value" th:text="${title}">Water main leak</div>
+                </div>
+                <div class="card-row">
+                    <div class="card-label">Previous Status</div>
+                    <div class="card-value" th:text="${oldStatus}" style="color: #8896a6; font-weight: bold;">OPEN</div>
+                </div>
+                <div class="card-row">
+                    <div class="card-label">New Status</div>
+                    <div class="card-value"><span class="badge-status" th:text="${newStatus}">IN_PROGRESS</span></div>
+                </div>
+            </div>
+            
+            <!-- Officer Notes -->
+            <div style="margin-top: 20px;">
+                <label style="font-size: 11px; font-weight: 800; color: #8896a6; text-transform: uppercase; display: block;">Responding Officer Field Notes</label>
+                <div class="notes-box" th:text="${notes}">
+                    Assigned crew dispatched to assess depth and arrange cold mix patching.
+                </div>
+            </div>
+            
+            <p style="margin-top: 25px;">You can view the full history of progress notes, SLA indicators, and detailed responses by logging into the Citizen Portal at any time.</p>
+            <p>Thank you for partnering with us to keep our municipality clean, safe, and efficient.</p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>© 2026 Department of Municipal Administration, Government of India.</p>
+            <p>This is an automated system dispatch. Please do not reply directly to this email address.</p>
+        </div>
+    </div>
+</body>
+</html>

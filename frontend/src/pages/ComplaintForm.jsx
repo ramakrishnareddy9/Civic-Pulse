@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useComplaints } from '@hooks/useComplaints'
 import { useNotification } from '@hooks/useNotification'
 import { ROUTES } from '@utils/constants'
+import CivicMap from '@components/common/CivicMap'
+import { fetchWards } from '@api/admin'
 
 export function ComplaintForm() {
   const navigate = useNavigate()
@@ -22,6 +24,8 @@ export function ComplaintForm() {
     category: '',
     ward: '',
     location: '',
+    latitude: '',
+    longitude: '',
     incidentDate: '',
     incidentTime: '',
     images: [],
@@ -29,6 +33,19 @@ export function ComplaintForm() {
   })
 
   const [imagePreview, setImagePreview] = useState([])
+  const [dbWards, setDbWards] = useState([])
+
+  useEffect(() => {
+    const loadWards = async () => {
+      try {
+        const data = await fetchWards()
+        setDbWards(data || [])
+      } catch (err) {
+        console.error('Failed to load wards:', err)
+      }
+    }
+    loadWards()
+  }, [])
 
   const categories = [
     { value: 'POTHOLE', label: 'Pothole/Road Damage' },
@@ -42,16 +59,36 @@ export function ComplaintForm() {
     { value: 'OTHER', label: 'Other' },
   ]
 
-  const wards = [
-    { value: 'WARD_1', label: 'Ward 1 - North' },
-    { value: 'WARD_2', label: 'Ward 2 - Central' },
-    { value: 'WARD_3', label: 'Ward 3 - East' },
-    { value: 'WARD_4', label: 'Ward 4 - West' },
-    { value: 'WARD_5', label: 'Ward 5 - South' },
-    { value: 'WARD_6', label: 'Ward 6 - Downtown' },
-    { value: 'WARD_7', label: 'Ward 7 - Uptown' },
-    { value: 'WARD_8', label: 'Ward 8 - Suburbs' },
-  ]
+  // Euclidean distance helper for ward resolution
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLon = (lon2 - lon1) * Math.PI / 180
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
+  }
+
+  const findClosestWard = (lat, lng, wardsList) => {
+    if (!wardsList || wardsList.length === 0) return ''
+    let closestWardId = ''
+    let minDistance = Infinity
+    
+    wardsList.forEach(w => {
+      if (w.latitude && w.longitude) {
+        const dist = getDistance(lat, lng, w.latitude, w.longitude)
+        if (dist < minDistance) {
+          minDistance = dist
+          closestWardId = w.id
+        }
+      }
+    })
+    
+    return closestWardId
+  }
 
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files || [])
@@ -108,8 +145,8 @@ export function ComplaintForm() {
       if (!formData.ward) newErrors.ward = 'Ward selection is required'
     }
     if (step === 3) {
-      if (imagePreview.length === 0) newErrors.images = 'At least one photo attachment is required'
-      if (!formData.privacyAgree) newErrors.privacyAgree = 'You must agree to the privacy terms'
+      // Images are optional - only check privacy agreement
+      if (!formData.privacyAgree) newErrors.privacyAgree = 'You must agree to the privacy declaration'
     }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -157,8 +194,10 @@ export function ComplaintForm() {
           title: formData.title,
           description: formData.description,
           category: formData.category,
-          ward: formData.ward,
+          wardId: formData.ward ? Number(formData.ward) : null,
           location: formData.location || null,
+          latitude: formData.latitude ? Number(formData.latitude) : null,
+          longitude: formData.longitude ? Number(formData.longitude) : null,
         },
         formData.images
       )
@@ -190,71 +229,95 @@ export function ComplaintForm() {
   const progressPercent = ((currentStep - 1) / (totalSteps - 1)) * 100
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-body-md flex flex-col items-center py-xl px-margin-mobile md:px-margin-desktop">
-      <div className="w-full max-w-4xl bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden shadow-sm">
+    <div
+      style={{ background: 'var(--gov-surface)', minHeight: 'calc(100vh - 56px)' }}
+      className="flex flex-col items-center py-10 px-4 md:px-8"
+    >
+      <div className="w-full max-w-3xl">
+        {/* Page header */}
+        {!isSuccess && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="material-symbols-outlined text-sm text-gray-400">chevron_right</span>
+              <span className="text-sm text-gray-500">Citizen Portal</span>
+              <span className="material-symbols-outlined text-sm text-gray-400">chevron_right</span>
+              <span className="text-sm font-semibold" style={{ color: 'var(--gov-navy)' }}>Submit Complaint</span>
+            </div>
+            <h1 className="text-2xl font-black" style={{ color: 'var(--gov-navy)' }}>New Civic Complaint</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Complete all steps to register your complaint with the municipality.</p>
+          </div>
+        )}
+      <div
+        className="bg-white border rounded-2xl overflow-hidden"
+        style={{ borderColor: 'var(--gov-border)', boxShadow: '0 4px 24px rgba(10,35,66,0.08)' }}
+      >
         
         {/* Progress Stepper */}
         {!isSuccess && (
-          <div className="bg-surface-container-low px-xl py-lg border-b border-outline-variant">
-            <div className="flex items-center justify-between relative max-w-2xl mx-auto">
-              <div className="absolute top-1/2 left-0 w-full h-[2px] bg-outline-variant -translate-y-1/2 z-0"></div>
-              <div 
-                className="absolute top-1/2 left-0 h-[2px] bg-primary -translate-y-1/2 z-0 transition-all duration-500" 
-                style={{ width: `${progressPercent}%` }}
-              ></div>
-              
-              {/* Step 1 Circle */}
-              <div className="relative z-10 flex flex-col items-center gap-xs">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-colors ${currentStep >= 1 ? 'bg-primary text-on-primary' : 'bg-surface-container-highest text-on-surface-variant border-2 border-outline-variant'}`}>
-                  {currentStep > 1 ? <span className="material-symbols-outlined text-[18px]">check</span> : '1'}
-                </div>
-                <span className={`font-label-md ${currentStep >= 1 ? 'text-primary' : 'text-outline'}`}>Incident</span>
-              </div>
-
-              {/* Step 2 Circle */}
-              <div className="relative z-10 flex flex-col items-center gap-xs">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-colors ${currentStep >= 2 ? 'bg-primary text-on-primary border-transparent' : 'bg-surface-container-highest text-on-surface-variant border-outline-variant'}`}>
-                  {currentStep > 2 ? <span className="material-symbols-outlined text-[18px]">check</span> : '2'}
-                </div>
-                <span className={`font-label-md ${currentStep >= 2 ? 'text-primary' : 'text-outline'}`}>Location</span>
-              </div>
-
-              {/* Step 3 Circle */}
-              <div className="relative z-10 flex flex-col items-center gap-xs">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-colors ${currentStep >= 3 ? 'bg-primary text-on-primary border-transparent' : 'bg-surface-container-highest text-on-surface-variant border-outline-variant'}`}>
-                  {currentStep > 3 ? <span className="material-symbols-outlined text-[18px]">check</span> : '3'}
-                </div>
-                <span className={`font-label-md ${currentStep >= 3 ? 'text-primary' : 'text-outline'}`}>Attachments</span>
-              </div>
-
-              {/* Step 4 Circle */}
-              <div className="relative z-10 flex flex-col items-center gap-xs">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-colors ${currentStep === 4 ? 'bg-primary text-on-primary border-transparent' : 'bg-surface-container-highest text-on-surface-variant border-outline-variant'}`}>
-                  4
-                </div>
-                <span className={`font-label-md ${currentStep === 4 ? 'text-primary' : 'text-outline'}`}>Review</span>
-              </div>
+          <div className="px-8 py-6 border-b" style={{ background: 'var(--gov-surface)', borderColor: 'var(--gov-border)' }}>
+            <div className="flex items-center max-w-2xl mx-auto">
+              {[
+                { num: 1, label: 'Incident' },
+                { num: 2, label: 'Location' },
+                { num: 3, label: 'Attachments' },
+                { num: 4, label: 'Review' },
+              ].map((s, i) => (
+                <>
+                  {/* Step dot */}
+                  <div key={s.num} className="flex flex-col items-center gap-1.5">
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-all"
+                      style={{
+                        background: currentStep > s.num ? 'var(--gov-green-light)' : currentStep === s.num ? 'var(--gov-navy)' : 'white',
+                        borderColor: currentStep >= s.num ? (currentStep > s.num ? 'var(--gov-green-light)' : 'var(--gov-navy)') : 'var(--gov-border)',
+                        color: currentStep >= s.num ? 'white' : 'var(--gov-text-muted)',
+                      }}
+                    >
+                      {currentStep > s.num ? (
+                        <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check</span>
+                      ) : s.num}
+                    </div>
+                    <span
+                      className="text-[11px] font-bold"
+                      style={{ color: currentStep >= s.num ? 'var(--gov-navy)' : 'var(--gov-text-light)' }}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  {/* Connector */}
+                  {i < 3 && (
+                    <div
+                      className="flex-1 h-0.5 mx-2 transition-all"
+                      style={{ background: currentStep > s.num ? 'var(--gov-green-light)' : 'var(--gov-border)' }}
+                    />
+                  )}
+                </>
+              ))}
             </div>
           </div>
         )}
 
         {/* Content Canvas */}
-        <div className="p-xl min-h-[460px] text-left">
+        <div className="p-8 min-h-[420px] text-left">
           {isSuccess ? (
             /* Success State */
-            <div className="flex flex-col items-center justify-center text-center space-y-lg py-xl">
-              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center text-on-primary">
-                <span className="material-symbols-outlined text-[48px] font-variation-settings-fill">check_circle</span>
+            <div className="flex flex-col items-center justify-center text-center py-12 space-y-5 animate-scale-in">
+              <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'var(--gov-green-light)' }}>
+                <span className="material-symbols-outlined text-5xl text-white" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
               </div>
-              <div className="space-y-xs">
-                <h2 className="font-headline-xl text-headline-xl text-primary font-bold">Report Submitted</h2>
-                <p className="text-on-surface-variant max-w-md mx-auto">
-                  Your complaint has been successfully filed with Ticket ID: <strong className="text-primary">{ticketId}</strong>. You can track its progress in your dashboard.
-                </p>
+              <div>
+                <h2 className="text-2xl font-black mb-2" style={{ color: 'var(--gov-navy)' }}>Complaint Submitted!</h2>
+                <p className="text-gray-500 mb-4">Your complaint has been registered and routed to the appropriate department.</p>
+                <div
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border-2 text-lg font-black"
+                  style={{ borderColor: 'var(--gov-navy)', color: 'var(--gov-navy)', background: 'rgba(10,35,66,0.04)' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>confirmation_number</span>
+                  Ticket #{ticketId}
+                </div>
               </div>
-              <div className="flex gap-md">
+              <div className="flex gap-3 mt-2">
                 <button 
-                  className="px-xl py-md bg-primary text-on-primary rounded-full font-label-lg shadow-sm hover:opacity-90 transition-all cursor-pointer" 
                   onClick={() => {
                     setFormData({
                       title: '',
@@ -266,24 +329,26 @@ export function ComplaintForm() {
                       incidentTime: '',
                       images: [],
                       privacyAgree: false
-                    })
-                    setImagePreview([])
-                    setIsSuccess(false)
-                    setCurrentStep(1)
+                    });
+                    setImagePreview([]);
+                    setIsSuccess(false);
+                    setCurrentStep(1);
                   }}
+                  className="gov-btn-outline text-sm font-bold px-6 py-2.5 rounded-xl"
                 >
                   Submit Another
                 </button>
-                <button 
-                  className="px-xl py-md border border-outline rounded-full font-label-lg hover:bg-surface-container transition-all cursor-pointer" 
+                <button
+                  className="gov-btn-primary text-sm font-bold px-6 py-2.5 rounded-xl"
                   onClick={() => navigate(ROUTES.CITIZEN.DASHBOARD)}
                 >
-                  Go to Dashboard
+                  <span className="material-symbols-outlined text-sm">dashboard</span>
+                  View Dashboard
                 </button>
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-xl">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               
               {/* STEP 1: Incident Details */}
               {currentStep === 1 && (
@@ -367,22 +432,34 @@ export function ComplaintForm() {
                     <p className="text-on-surface-variant">Tell us exactly where this is happening and give us more context.</p>
                   </div>
                   
-                  <div className="w-full h-64 rounded-xl overflow-hidden border border-outline-variant relative group">
-                    <div className="absolute inset-0 bg-surface-container-high flex items-center justify-center">
-                      <img 
-                        className="w-full h-full object-cover" 
-                        alt="Simulated map location drop"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHt6fam6R6H_jXispBEb--ptUk5AGZWJCMflIs8drCxK3ByLuh_A7PmF_Sdh4l9Kuw7NRRbvyHe00L5cWeJNHQ11jKCCPOr3QHxV9vobBXfZDMOT1W2Zb0xSnyYIxQwzef2F4iWJOJSyVnCe6V67jh6iRt-y6ZyiHN6Eprt7aCNcqzjW3pIex5SJj1syH92vOtLEWzooHIEXRCuL2WwSXnf_DSxKIo8CzKO-EkM91mhFCsZEzkxMyRsl5Qb7tM5yHRhNhsQoeVidA"
-                      />
-                      <button 
-                        type="button"
-                        onClick={handleUseCurrentLocation}
-                        className="absolute bottom-md right-md bg-white p-sm rounded-lg shadow-md border border-outline-variant font-label-md flex items-center gap-xs cursor-pointer hover:bg-surface-container-low transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-primary">my_location</span>
-                        Use my current location
-                      </button>
-                    </div>
+                  <div className="w-full h-[350px] rounded-xl overflow-hidden border border-outline-variant relative">
+                    <CivicMap
+                      center={[12.9716, 77.5946]}
+                      zoom={12}
+                      interactive={true}
+                      onLocationSelect={(lat, lng, address) => {
+                        setFormData((prev) => {
+                          const updated = {
+                            ...prev,
+                            location: address,
+                            latitude: lat,
+                            longitude: lng,
+                          }
+                          // Automatically resolve closest ward if we have loaded dbWards
+                          if (dbWards.length > 0) {
+                            const closestWardId = findClosestWard(lat, lng, dbWards)
+                            if (closestWardId) {
+                              updated.ward = closestWardId.toString()
+                            }
+                          }
+                          return updated
+                        })
+                        if (errors.ward) {
+                          setErrors((prev) => ({ ...prev, ward: '' }))
+                        }
+                      }}
+                      height="350px"
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
@@ -398,8 +475,8 @@ export function ComplaintForm() {
                         disabled={loading}
                       >
                         <option value="">Select Ward</option>
-                        {wards.map((w) => (
-                          <option key={w.value} value={w.value}>{w.label}</option>
+                        {dbWards.map((w) => (
+                          <option key={w.id} value={w.id.toString()}>{w.name}</option>
                         ))}
                       </select>
                       {errors.ward && <p className="text-error font-label-md">{errors.ward}</p>}
@@ -540,7 +617,7 @@ export function ComplaintForm() {
                     <div className="p-md rounded-lg bg-surface border border-outline-variant space-y-xs md:col-span-2">
                       <span className="text-on-surface-variant font-label-md uppercase tracking-wider block text-xs">Ward &amp; Specific Location</span>
                       <p className="font-body-md text-on-surface font-semibold">
-                        {wards.find(w => w.value === formData.ward)?.label || 'No Ward Selected'}
+                        {dbWards.find(w => w.id.toString() === formData.ward)?.name || 'No Ward Selected'}
                         {formData.location ? ` - ${formData.location}` : ''}
                       </p>
                     </div>
@@ -613,25 +690,22 @@ export function ComplaintForm() {
 
       </div>
 
-      {/* Info Grid (Bento Style Support) */}
-      <div className="w-full max-w-4xl mt-xl grid grid-cols-1 md:grid-cols-3 gap-lg text-left">
-        <div className="p-lg bg-surface border border-outline-variant rounded-xl flex flex-col gap-sm mui-card-shadow">
-          <span className="material-symbols-outlined text-primary text-2xl">schedule</span>
-          <h4 className="font-label-lg text-primary font-bold">Estimated Response</h4>
-          <p className="font-label-md text-on-surface-variant">Emergency reports are triaged within 4 hours. General maintenance within 3-5 business days.</p>
-        </div>
-        <div className="p-lg bg-surface border border-outline-variant rounded-xl flex flex-col gap-sm mui-card-shadow">
-          <span className="material-symbols-outlined text-primary text-2xl">support_agent</span>
-          <h4 className="font-label-lg text-primary font-bold">Need Live Help?</h4>
-          <p className="font-label-md text-on-surface-variant">Call our municipal hotline at 311 for urgent hazards that require immediate intervention.</p>
-        </div>
-        <div className="p-lg bg-surface border border-outline-variant rounded-xl flex flex-col gap-sm mui-card-shadow">
-          <span className="material-symbols-outlined text-primary text-2xl">policy</span>
-          <h4 className="font-label-lg text-primary font-bold">Public Transparency</h4>
-          <p className="font-label-md text-on-surface-variant">All valid reports are visible on our Open Data map to ensure neighborhood accountability.</p>
-        </div>
+      {/* Info Grid */}
+      <div className="w-full mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+        {[
+          { icon: 'schedule', title: 'Estimated Response', text: 'Emergency reports are triaged within 4 hours. General maintenance within 3–5 business days.' },
+          { icon: 'support_agent', title: 'Need Live Help?', text: 'Call our municipal hotline at 311 for urgent hazards that require immediate intervention.' },
+          { icon: 'policy', title: 'Public Transparency', text: 'All valid reports are visible on our Open Data map to ensure neighborhood accountability.' },
+        ].map((info, i) => (
+          <div key={i} className="p-5 bg-white border rounded-2xl flex flex-col gap-3" style={{ borderColor: 'var(--gov-border)' }}>
+            <span className="material-symbols-outlined text-2xl" style={{ color: 'var(--gov-navy)', fontVariationSettings: "'FILL' 1" }}>{info.icon}</span>
+            <h4 className="font-bold text-sm" style={{ color: 'var(--gov-navy)' }}>{info.title}</h4>
+            <p className="text-sm text-gray-500 leading-relaxed">{info.text}</p>
+          </div>
+        ))}
       </div>
 
+      </div>
     </div>
   )
 }

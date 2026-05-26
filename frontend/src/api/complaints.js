@@ -72,6 +72,8 @@ export const submitComplaint = async (complaintData, images = []) => {
           description: complaintData.description,
           location: complaintData.location,
           wardId: complaintData.wardId,
+          latitude: complaintData.latitude,
+          longitude: complaintData.longitude,
         }),
       ],
       { type: 'application/json' }

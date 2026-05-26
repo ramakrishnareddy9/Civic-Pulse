@@ -220,14 +220,15 @@ export const useComplaints = () => {
         clearError()
 
         const data = await complaintService.fetchOfficerQueue(officerEmail, page, limit)
-        setComplaints(data.content || [])
+        const list = data.content || []
+        setComplaints(list)
         setPagination(data)
 
-        return true
+        return list
       } catch (err) {
         const apiError = handleApiError(err)
         setError(apiError.message)
-        return false
+        throw err
       } finally {
         setLoading(false)
       }
