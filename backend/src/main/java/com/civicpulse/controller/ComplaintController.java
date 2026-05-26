@@ -3,6 +3,10 @@ package com.civicpulse.controller;
 import com.civicpulse.model.dto.request.ComplaintRequestDto;
 import com.civicpulse.model.dto.response.ApiResponseDto;
 import com.civicpulse.model.dto.response.ComplaintResponseDto;
+import com.civicpulse.model.entity.AiInsight;
+import com.civicpulse.model.enums.InsightType;
+import com.civicpulse.repository.AiInsightRepository;
+import com.civicpulse.repository.SlaRepository;
 import com.civicpulse.service.complaint.ComplaintService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,13 +33,23 @@ import java.util.List;
 public class ComplaintController {
 
     private final ComplaintService complaintService;
+    private final AiInsightRepository aiInsightRepository;
+    private final SlaRepository slaRepository;
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public record StatusUpdateDto(String status, String notes) {}
+
+    @PostMapping(value = { "", "/submit" }, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Submit a new complaint with optional images")
     public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> submit(
-            @RequestPart("data") @Valid ComplaintRequestDto dto,
+            @RequestPart(value = "data", required = false) @Valid ComplaintRequestDto dtoFromData,
+            @RequestPart(value = "complaint", required = false) @Valid ComplaintRequestDto dtoFromComplaint,
             @RequestPart(value = "images", required = false) List<MultipartFile> images,
             @AuthenticationPrincipal UserDetails userDetails) {
+
+        ComplaintRequestDto dto = dtoFromData != null ? dtoFromData : dtoFromComplaint;
+        if (dto == null) {
+            throw new IllegalArgumentException("Missing part 'data' or 'complaint'");
+        }
 
         ComplaintResponseDto response = complaintService.submitComplaint(
                 dto, images, userDetails.getUsername());
@@ -45,8 +59,11 @@ public class ComplaintController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get complaint by ID")
-    public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponseDto.success(complaintService.getComplaint(id)));
+    public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> getById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                complaintService.getComplaint(id, userDetails.getUsername())));
     }
 
     @GetMapping("/my")
@@ -83,12 +100,86 @@ public class ComplaintController {
     @Operation(summary = "Update complaint status")
     public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> updateStatus(
             @PathVariable Long id,
-            @RequestParam String status,
-            @RequestParam(required = false) String notes,
+            @RequestBody StatusUpdateDto dto,
             @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(ApiResponseDto.success(
-                complaintService.updateStatus(id, status, notes, userDetails.getUsername()),
+                complaintService.updateStatus(id, dto.status(), dto.notes(), userDetails.getUsername()),
                 "Status updated"));
+    }
+
+    @GetMapping("/user/{email}")
+    @Operation(summary = "Get user's complaints by email parameter")
+    public ResponseEntity<ApiResponseDto<Page<ComplaintResponseDto>>> getByUserEmail(
+            @PathVariable String email,
+            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                complaintService.getByUser(email, pageable)));
+    }
+
+    @GetMapping("/officer/{email}")
+    @PreAuthorize("hasAnyRole('OFFICER','DEPT_HEAD','ADMIN')")
+    @Operation(summary = "Get officer's queue by email parameter")
+    public ResponseEntity<ApiResponseDto<Page<ComplaintResponseDto>>> getOfficerQueueByEmail(
+            @PathVariable String email,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                complaintService.getOfficerQueue(email, pageable)));
+    }
+
+    @GetMapping("/{id}/insights")
+    @Operation(summary = "Get AI insights for a complaint")
+    public ResponseEntity<ApiResponseDto<Object>> getComplaintInsights(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        ComplaintResponseDto complaint = complaintService.getComplaint(id, userDetails.getUsername());
+        
+        java.util.Map<String, Object> insights = new java.util.HashMap<>();
+        insights.put("complaintId", id);
+        insights.put("aiCategory", complaint.aiCategory());
+        insights.put("aiPriority", complaint.aiPriority());
+        insights.put("aiReason", complaint.aiReason());
+        insights.put("sentimentScore", complaint.sentimentScore());
+        
+        List<AiInsight> wardInsights = List.of();
+        if (complaint.wardId() != null) {
+            wardInsights = aiInsightRepository.findByWardIdAndInsightTypeOrderByGeneratedAtDesc(
+                    complaint.wardId(), InsightType.DAILY_SUMMARY);
+        }
+        insights.put("wardInsights", wardInsights);
+        
+        return ResponseEntity.ok(ApiResponseDto.success(insights));
+    }
+
+    @GetMapping("/{id}/sla")
+    @Operation(summary = "Get SLA information for a complaint")
+    public ResponseEntity<ApiResponseDto<Object>> getComplaintSla(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        ComplaintResponseDto complaint = complaintService.getComplaint(id, userDetails.getUsername());
+        
+        var policyOpt = slaRepository.findByCategoryAndPriorityAndIsActiveTrue(
+                complaint.category(), complaint.priority());
+        
+        java.util.Map<String, Object> slaInfo = new java.util.HashMap<>();
+        slaInfo.put("complaintId", id);
+        slaInfo.put("category", complaint.category());
+        slaInfo.put("priority", complaint.priority());
+        slaInfo.put("slaDeadline", complaint.slaDeadline());
+        slaInfo.put("resolvedAt", complaint.resolvedAt());
+        slaInfo.put("isBreached", complaint.resolvedAt() != null 
+                ? complaint.resolvedAt().isAfter(complaint.slaDeadline()) 
+                : java.time.LocalDateTime.now().isAfter(complaint.slaDeadline()));
+        
+        if (policyOpt.isPresent()) {
+            var policy = policyOpt.get();
+            slaInfo.put("resolutionHours", policy.getResolutionHours());
+            slaInfo.put("escalationHours", policy.getEscalationHours());
+        } else {
+            slaInfo.put("resolutionHours", 48);
+            slaInfo.put("escalationHours", 72);
+        }
+        
+        return ResponseEntity.ok(ApiResponseDto.success(slaInfo));
     }
 
     @DeleteMapping("/{id}")

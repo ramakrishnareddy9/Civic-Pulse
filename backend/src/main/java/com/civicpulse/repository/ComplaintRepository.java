@@ -1,6 +1,7 @@
 package com.civicpulse.repository;
 
 import com.civicpulse.model.entity.Complaint;
+import com.civicpulse.model.enums.ComplaintCategory;
 import com.civicpulse.model.enums.ComplaintStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,10 +24,17 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
 
     List<Complaint> findTop50ByWardIdAndStatusNotAndIsDeletedFalse(Long wardId, ComplaintStatus status);
 
+        @Query("SELECT c FROM Complaint c WHERE c.isDeleted = false AND c.status IN ('OPEN', 'IN_PROGRESS') " +
+            "AND c.category = :category AND c.latitude IS NOT NULL AND c.longitude IS NOT NULL " +
+            "AND c.createdAt >= :since")
+        List<Complaint> findRecentOpenByCategory(@Param("category") ComplaintCategory category,
+                               @Param("since") LocalDateTime since);
+
     // SLA breach check: status not resolved and deadline passed
-    @Query("SELECT c FROM Complaint c WHERE c.status NOT IN ('RESOLVED', 'CLOSED', 'REJECTED') " +
+        @Query("SELECT c FROM Complaint c WHERE c.status NOT IN :closedStatuses " +
            "AND c.slaDeadline < :now AND c.isDeleted = false")
-    List<Complaint> findSlaBreached(@Param("now") LocalDateTime now);
+        List<Complaint> findSlaBreached(@Param("now") LocalDateTime now,
+                         @Param("closedStatuses") List<ComplaintStatus> closedStatuses);
 
     // Crisis detection: count complaints by category+ward in last N minutes
     @Query(value = """

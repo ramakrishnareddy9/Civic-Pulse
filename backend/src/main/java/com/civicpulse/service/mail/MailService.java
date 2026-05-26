@@ -17,6 +17,24 @@ public interface MailService {
      * @param ward The assigned municipal ward name
      */
     void sendComplaintSubmissionEmail(String toEmail, String citizenName, Long complaintId, String title, String category, String ward);
+
+    /**
+     * Sends an email verification link to a newly registered user.
+     *
+     * @param toEmail The user's registered email
+     * @param citizenName The user's full name
+     * @param verificationToken One-time verification token
+     */
+    void sendEmailVerificationEmail(String toEmail, String citizenName, String verificationToken);
+
+    /**
+     * Sends a password reset email with a short-lived token.
+     *
+     * @param toEmail The user's registered email
+     * @param citizenName The user's display name
+     * @param resetToken The one-time reset token
+     */
+    void sendPasswordResetEmail(String toEmail, String citizenName, String resetToken);
     
     /**
      * Sends a status change notification email to the citizen when their complaint is updated.

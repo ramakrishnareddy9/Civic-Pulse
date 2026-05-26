@@ -5,6 +5,7 @@ import { useAuth } from '@hooks/useAuth'
 import { useAuthStore } from '@store/authStore'
 import { useUiStore } from '@store/uiStore'
 import { ROUTES } from '@utils/constants'
+import ErrorBoundary from '@components/common/ErrorBoundary'
 import { LoginPage } from '@pages/LoginPage'
 import { RegisterPage } from '@pages/RegisterPage'
 import { ResetPasswordPage } from '@pages/ResetPasswordPage'
@@ -61,7 +62,7 @@ function NotFoundPage() {
 function RoleDashboardRedirect({ user }) {
   if (user?.role === 'CITIZEN') return <Navigate to={ROUTES.CITIZEN.DASHBOARD} replace />
   if (user?.role === 'OFFICER') return <Navigate to={ROUTES.OFFICER.DASHBOARD} replace />
-  if (user?.role === 'ADMIN') return <Navigate to={ROUTES.ADMIN.DASHBOARD} replace />
+  if (user?.role === 'ADMIN' || user?.role === 'DEPT_HEAD') return <Navigate to={ROUTES.ADMIN.DASHBOARD} replace />
   return <Navigate to={ROUTES.LOGIN} replace />
 }
 
@@ -96,14 +97,16 @@ function App() {
   }
 
   /**
-   * Protected route wrapper with optional role checking
+   * Protected route wrapper with optional role checking (supports multiple roles)
    */
-  const ProtectedRoute = ({ children, requiredRole = null }) => {
+  const ProtectedRoute = ({ children, requiredRoles = null }) => {
     if (!isAuthenticated) {
       return <Navigate to={ROUTES.LOGIN} replace />
     }
 
-    if (requiredRole && user?.role !== requiredRole) {
+    // Support both array of roles and single role for backwards compatibility
+    const rolesArray = Array.isArray(requiredRoles) ? requiredRoles : (requiredRoles ? [requiredRoles] : null)
+    if (rolesArray && !rolesArray.includes(user?.role)) {
       return <RoleDashboardRedirect user={user} />
     }
 
@@ -164,7 +167,7 @@ function App() {
           <Route
             path={ROUTES.CITIZEN.DASHBOARD}
             element={
-              <ProtectedRoute requiredRole="CITIZEN">
+              <ProtectedRoute requiredRoles="CITIZEN">
                 <CitizenDashboard />
               </ProtectedRoute>
             }
@@ -172,7 +175,7 @@ function App() {
           <Route
             path={ROUTES.CITIZEN.SUBMIT_COMPLAINT}
             element={
-              <ProtectedRoute requiredRole="CITIZEN">
+              <ProtectedRoute requiredRoles="CITIZEN">
                 <ComplaintForm />
               </ProtectedRoute>
             }
@@ -180,7 +183,7 @@ function App() {
           <Route
             path="/citizen/complaints/:id"
             element={
-              <ProtectedRoute requiredRole="CITIZEN">
+              <ProtectedRoute requiredRoles="CITIZEN">
                 <ComplaintDetail />
               </ProtectedRoute>
             }
@@ -190,7 +193,7 @@ function App() {
           <Route
             path={ROUTES.OFFICER.DASHBOARD}
             element={
-              <ProtectedRoute requiredRole="OFFICER">
+              <ProtectedRoute requiredRoles="OFFICER">
                 <OfficerDashboard />
               </ProtectedRoute>
             }
@@ -198,7 +201,7 @@ function App() {
           <Route
             path="/officer/complaints/:id"
             element={
-              <ProtectedRoute requiredRole="OFFICER">
+              <ProtectedRoute requiredRoles="OFFICER">
                 <ComplaintDetail />
               </ProtectedRoute>
             }
@@ -218,7 +221,7 @@ function App() {
           <Route
             path={ROUTES.ADMIN.DASHBOARD}
             element={
-              <ProtectedRoute requiredRole="ADMIN">
+              <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
                 <AdminDashboard />
               </ProtectedRoute>
             }
@@ -226,7 +229,7 @@ function App() {
           <Route
             path="/admin/departments"
             element={
-              <ProtectedRoute requiredRole="ADMIN">
+              <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
                 <AdminDepartments />
               </ProtectedRoute>
             }
@@ -234,7 +237,7 @@ function App() {
           <Route
             path="/admin/officers"
             element={
-              <ProtectedRoute requiredRole="ADMIN">
+              <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
                 <AdminOfficers />
               </ProtectedRoute>
             }
@@ -242,7 +245,7 @@ function App() {
           <Route
             path="/admin/wards"
             element={
-              <ProtectedRoute requiredRole="ADMIN">
+              <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
                 <AdminWards />
               </ProtectedRoute>
             }

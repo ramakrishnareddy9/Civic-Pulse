@@ -3,9 +3,9 @@ spring:
     name: CivicPulse
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/civicpulse
+    url: jdbc:postgresql://localhost:5432/civic_pulse
     username: ${DB_USERNAME:civicadmin}
-    password: ${DB_PASSWORD:civicpass}
+    password: ${DB_PASSWORD:18062005}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -44,7 +44,7 @@ spring:
           model: text-embedding-3-small
     vectorstore:
       pgvector:
-        initialize-schema: false
+        initialize-schema: true
         index-type: IVFFLAT
         distance-type: COSINE_DISTANCE
         dimensions: 1536

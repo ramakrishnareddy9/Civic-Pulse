@@ -1,5 +1,6 @@
 package com.civicpulse.model.dto.request;
 
+import com.civicpulse.model.enums.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -24,6 +25,8 @@ public record OfficerOnboardingDto(
         Long wardId,        // Required
 
         @NotBlank(message = "Designation is required")
-        String designation
+        String designation,
+
+        UserRole role
 ) {
 }

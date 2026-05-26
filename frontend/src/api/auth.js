@@ -1,5 +1,26 @@
 import { post, get } from './client'
 
+const mapAuthSession = (response) => {
+  const payload = response?.data ?? response
+  const session = payload?.data ?? payload
+
+  if (session && typeof session === 'object' && 'accessToken' in session) {
+    return {
+      user: {
+        email: session.email,
+        fullName: session.fullName,
+        role: session.role,
+      },
+      token: session.accessToken,
+      refreshToken: session.refreshToken || null,
+      tokenType: session.tokenType,
+      expiresIn: session.expiresIn,
+    }
+  }
+
+  return session
+}
+
 /**
  * Register new user
  * @param {Object} userData - User registration data
@@ -10,12 +31,12 @@ import { post, get } from './client'
  * @returns {Promise<{user: User, token: string}>}
  */
 export const register = async (userData) => {
-  return post('/api/auth/register', {
+  return mapAuthSession(await post('/api/auth/register', {
     email: userData.email,
     fullName: userData.fullName,
     password: userData.password,
     phone: userData.phone || '',
-  })
+  }))
 }
 
 /**
@@ -25,10 +46,10 @@ export const register = async (userData) => {
  * @returns {Promise<{user: User, token: string}>}
  */
 export const login = async (email, password) => {
-  return post('/api/auth/login', {
+  return mapAuthSession(await post('/api/auth/login', {
     email,
     password,
-  })
+  }))
 }
 
 /**
@@ -44,7 +65,8 @@ export const logout = async () => {
  * @returns {Promise<User>}
  */
 export const getCurrentUser = async () => {
-  return get('/api/auth/me')
+  const response = await get('/api/auth/me')
+  return response?.data ?? response
 }
 
 /**
@@ -95,6 +117,8 @@ export const changePassword = async (oldPassword, newPassword) => {
  * Refresh auth token
  * @returns {Promise<{token: string}>}
  */
-export const refreshToken = async () => {
-  return post('/api/auth/refresh', {})
+export const refreshToken = async (refreshTokenValue) => {
+  return mapAuthSession(await post('/api/auth/refresh', {
+    refreshToken: refreshTokenValue,
+  }))
 }

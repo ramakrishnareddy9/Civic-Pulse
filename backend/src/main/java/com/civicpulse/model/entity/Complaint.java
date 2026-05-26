@@ -9,6 +9,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,6 +55,12 @@ public class Complaint {
 
     @Column(columnDefinition = "TEXT")
     private String address;
+
+    @Column(name = "incident_date")
+    private LocalDate incidentDate;
+
+    @Column(name = "incident_time")
+    private LocalTime incidentTime;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ward_id")

@@ -30,7 +30,7 @@ const DEMO_ACCOUNTS = [
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { login, error: authError } = useAuth()
   const { error: showError } = useNotification()
 
   const [formData, setFormData] = useState({ email: '', password: '', rememberMe: false })
@@ -59,7 +59,10 @@ export function LoginPage() {
     if (!validateForm()) return
     setLoading(true)
     try {
-      await login(formData.email, formData.password)
+      const success = await login(formData.email, formData.password)
+      if (!success) {
+        showError(authError || 'Login failed. Please try again.')
+      }
       // Navigate is handled by the store/redirect logic in App.jsx via isAuthenticated
     } catch (err) {
       showError(err?.message || 'Login failed. Please try again.')

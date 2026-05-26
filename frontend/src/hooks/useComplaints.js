@@ -44,8 +44,13 @@ export const useComplaints = () => {
         setFilters(filterUpdates)
 
         const data = await complaintService.fetchComplaints(mergedFilters)
-        setComplaints(data.content || [])
-        setPagination(data)
+        // Handle both array responses (mocks) and Spring Page format { content: [] }
+        const complaintsArray = Array.isArray(data) ? data : (data?.content || [])
+        setComplaints(complaintsArray)
+        // Only set pagination if we have page-like data structure
+        if (data?.content !== undefined) {
+          setPagination(data)
+        }
 
         return true
       } catch (err) {

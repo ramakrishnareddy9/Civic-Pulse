@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Verify Your Email</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fc;
+            color: #0d1b2a;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(10,35,66,0.08);
+            border: 1px solid #d0d7e3;
+        }
+        .header {
+            background: linear-gradient(135deg, #0a2342 0%, #1565c0 100%);
+            padding: 30px;
+            text-align: center;
+            border-bottom: 4px solid #c6a227;
+        }
+        .header h1 {
+            color: #ffffff;
+            font-size: 24px;
+            margin: 0;
+            font-weight: 800;
+        }
+        .content {
+            padding: 35px 30px;
+        }
+        .button {
+            display: inline-block;
+            background: #0a2342;
+            color: #ffffff !important;
+            text-decoration: none;
+            font-weight: 800;
+            padding: 14px 22px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        .code {
+            display: inline-block;
+            background: #f8f9fc;
+            border: 1px solid #d0d7e3;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-weight: 800;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CIVIC PULSE</h1>
+        </div>
+        <div class="content">
+            <h2>Verify your email address</h2>
+            <p>Dear <strong th:text="${citizenName}">Citizen</strong>,</p>
+            <p>Your Civic Pulse account has been created. Verify your email address using this one-time link:</p>
+            <p><a th:href="${verificationLink}" class="button">Verify Email</a></p>
+            <p>If the button does not work, use this token manually:</p>
+            <p class="code" th:text="${verificationToken}">ABC123</p>
+        </div>
+    </div>
+</body>
+</html>

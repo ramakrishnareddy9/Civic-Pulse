@@ -11,6 +11,7 @@ export const useAuthStore = create(
     devtools((set, get) => ({
       user: null,
       token: null,
+      refreshToken: null,
       isAuthenticated: false,
       loading: false,
       error: null,
@@ -19,16 +20,17 @@ export const useAuthStore = create(
        * Set authentication state
        * @param {User} user - User object
        * @param {string} token - Auth token
+       * @param {string | null} refreshToken - Refresh token
        */
-      setAuth: (user, token) => {
-        set({ user, token, isAuthenticated: true, error: null }, false, 'setAuth')
+      setAuth: (user, token, refreshToken = null) => {
+        set({ user, token, refreshToken, isAuthenticated: true, error: null }, false, 'setAuth')
       },
 
       /**
        * Clear authentication state
        */
       logout: () => {
-        set({ user: null, token: null, isAuthenticated: false, error: null }, false, 'logout')
+        set({ user: null, token: null, refreshToken: null, isAuthenticated: false, error: null }, false, 'logout')
       },
 
       /**
@@ -67,7 +69,7 @@ export const useAuthStore = create(
     }), { name: 'auth-store' }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      partialize: (state) => ({ token: state.token, refreshToken: state.refreshToken, user: state.user }),
     }
   )
 )

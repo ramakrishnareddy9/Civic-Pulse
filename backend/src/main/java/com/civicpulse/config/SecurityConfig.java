@@ -2,6 +2,8 @@ package com.civicpulse.config;
 
 import com.civicpulse.security.JwtAuthFilter;
 import com.civicpulse.security.CustomUserDetailsService;
+import com.civicpulse.security.RateLimitingFilter;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,7 +25,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 @EnableWebSecurity
@@ -32,7 +37,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final CustomUserDetailsService userDetailsService;
+
+    @Value("${CORS_ALLOWED_ORIGINS:}")
+    private String corsAllowedOrigins;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -59,6 +68,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/ai/summary/**").hasAnyRole("OFFICER","DEPT_HEAD","ADMIN")
                 // Dept Head & Admin
                 .requestMatchers("/api/analytics/**").hasAnyRole("DEPT_HEAD","ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/ai/insights").hasAnyRole("DEPT_HEAD","ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/ai/insights/**").hasAnyRole("DEPT_HEAD","ADMIN")
                 // Admin only
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -66,6 +76,7 @@ public class SecurityConfig {
             )
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(rateLimitingFilter, JwtAuthFilter.class);
 
         return http.build();
     }
@@ -73,13 +84,32 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:3000", "http://localhost:5173"));
+        config.setAllowedOriginPatterns(resolveAllowedOrigins());
         config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    private List<String> resolveAllowedOrigins() {
+        Set<String> origins = new LinkedHashSet<>();
+        origins.add("http://localhost:3000");
+        origins.add("http://localhost:5173");
+        origins.add("http://127.0.0.1:3000");
+        origins.add("http://127.0.0.1:5173");
+
+        if (corsAllowedOrigins != null && !corsAllowedOrigins.isBlank()) {
+            for (String origin : corsAllowedOrigins.split(",")) {
+                String trimmed = origin.trim();
+                if (!trimmed.isEmpty()) {
+                    origins.add(trimmed);
+                }
+            }
+        }
+
+        return new ArrayList<>(origins);
     }
 
     @Bean

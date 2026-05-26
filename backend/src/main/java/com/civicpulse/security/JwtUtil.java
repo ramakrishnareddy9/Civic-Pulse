@@ -1,13 +1,14 @@
 package com.civicpulse.security;
 
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Slf4j
@@ -23,10 +24,15 @@ public class JwtUtil {
     @Value("${jwt.refresh-expiration-ms}")
     private long refreshExpirationMs;
 
+    @PostConstruct
+    void assertConfiguredSecret() {
+        if ("default-dev-secret-key-change-in-production-32chars".equals(jwtSecret)) {
+            throw new IllegalStateException("JWT secret must be set via JWT_SECRET before starting the application");
+        }
+    }
+
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(
-                java.util.Base64.getEncoder().encodeToString(jwtSecret.getBytes()));
-        return Keys.hmacShaKeyFor(keyBytes);
+        return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String generateToken(String email, String role) {

@@ -23,7 +23,12 @@ public class EscalationServiceImpl {
 
     @Transactional
     public int escalateBreachedComplaints() {
-        List<Complaint> breached = complaintRepository.findSlaBreached(LocalDateTime.now());
+        List<Complaint> breached = complaintRepository.findSlaBreached(
+            LocalDateTime.now(),
+            java.util.List.of(
+                com.civicpulse.model.enums.ComplaintStatus.RESOLVED,
+                com.civicpulse.model.enums.ComplaintStatus.CLOSED,
+                com.civicpulse.model.enums.ComplaintStatus.REJECTED));
         int count = 0;
 
         for (Complaint complaint : breached) {

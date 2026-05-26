@@ -1,9 +1,11 @@
 package com.civicpulse.service.complaint;
 
 import com.civicpulse.exception.ComplaintNotFoundException;
+import com.civicpulse.exception.DuplicateComplaintException;
 import com.civicpulse.model.dto.request.ComplaintRequestDto;
 import com.civicpulse.model.dto.response.ComplaintResponseDto;
 import com.civicpulse.model.entity.*;
+import com.civicpulse.model.enums.ComplaintCategory;
 import com.civicpulse.model.enums.ComplaintStatus;
 import com.civicpulse.model.enums.Priority;
 import com.civicpulse.repository.*;
@@ -16,12 +18,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -60,9 +65,22 @@ public class ComplaintServiceImpl implements ComplaintService {
         Ward ward = null;
         if (dto.wardId() != null) {
             ward = wardRepository.findById(dto.wardId()).orElse(null);
-        } else if (dto.latitude() != null && dto.longitude() != null) {
+        } else if (dto.ward() != null && !dto.ward().isBlank()) {
+            ward = wardRepository.findByCode(dto.ward()).orElse(null);
+            if (ward == null) {
+                try {
+                    Long id = Long.parseLong(dto.ward());
+                    ward = wardRepository.findById(id).orElse(null);
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        
+        if (ward == null && dto.latitude() != null && dto.longitude() != null) {
             ward = findClosestWard(dto.latitude().doubleValue(), dto.longitude().doubleValue());
         }
+
+        ComplaintCategory submittedCategory = mapSubmittedCategory(dto.category());
+        ensureNotDuplicate(submittedCategory, dto.latitude(), dto.longitude());
 
         // 3. Create base complaint
         Complaint complaint = Complaint.builder()
@@ -71,10 +89,13 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .latitude(dto.latitude())
                 .longitude(dto.longitude())
                 .address(dto.address())
+            .incidentDate(dto.incidentDate())
+            .incidentTime(dto.incidentTime())
                 .ward(ward)
                 .citizen(citizen)
                 .status(ComplaintStatus.OPEN)
                 .priority(Priority.MEDIUM)
+            .category(submittedCategory)
                 .build();
 
         complaint = complaintRepository.save(complaint);
@@ -113,9 +134,6 @@ public class ComplaintServiceImpl implements ComplaintService {
                 }
             }
         }
-
-        // 6. Save final complaint
-        complaint = complaintRepository.save(complaint);
 
         // Trigger complaint submission email notification (Asynchronous)
         try {
@@ -158,6 +176,17 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepository.findById(id)
                 .filter(c -> !c.getIsDeleted())
                 .orElseThrow(() -> new ComplaintNotFoundException(id));
+        return toDto(complaint);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ComplaintResponseDto getComplaint(Long id, String requesterEmail) {
+        Complaint complaint = complaintRepository.findById(id)
+                .filter(c -> !c.getIsDeleted())
+                .orElseThrow(() -> new ComplaintNotFoundException(id));
+
+        ensureCanViewComplaint(complaint, requesterEmail);
         return toDto(complaint);
     }
 
@@ -282,7 +311,8 @@ public class ComplaintServiceImpl implements ComplaintService {
         return new ComplaintResponseDto(
                 c.getId(), c.getTitle(), c.getDescription(),
                 c.getCategory(), c.getStatus(), c.getPriority(),
-                c.getLatitude(), c.getLongitude(), c.getAddress(),
+            c.getLatitude(), c.getLongitude(), c.getAddress(),
+            c.getIncidentDate(), c.getIncidentTime(),
                 c.getWard() != null ? c.getWard().getName() : null,
                 c.getWard() != null ? c.getWard().getId() : null,
                 c.getCitizen() != null ? c.getCitizen().getFullName() : null,
@@ -296,6 +326,46 @@ public class ComplaintServiceImpl implements ComplaintService {
                 c.getSentimentScore(), imageUrls,
                 c.getCreatedAt(), c.getUpdatedAt()
         );
+    }
+
+    private void ensureCanViewComplaint(Complaint complaint, String requesterEmail) {
+        User user = userRepository.findByEmail(requesterEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + requesterEmail));
+
+        if (user.getRole() == com.civicpulse.model.enums.UserRole.ADMIN) {
+            return;
+        }
+
+        if (complaint.getCitizen() != null && requesterEmail.equalsIgnoreCase(complaint.getCitizen().getEmail())) {
+            return;
+        }
+
+        Officer officer = officerRepository.findByUserId(user.getId()).orElse(null);
+        if (officer == null) {
+            throw new AccessDeniedException("You are not allowed to view this complaint");
+        }
+
+        if (complaint.getOfficer() != null
+                && complaint.getOfficer().getUser() != null
+                && requesterEmail.equalsIgnoreCase(complaint.getOfficer().getUser().getEmail())) {
+            return;
+        }
+
+        boolean sameWard = officer.getWard() != null
+                && complaint.getWard() != null
+                && officer.getWard().getId() != null
+                && officer.getWard().getId().equals(complaint.getWard().getId());
+
+        boolean sameDepartment = officer.getDepartment() != null
+                && complaint.getDepartment() != null
+                && officer.getDepartment().getId() != null
+                && officer.getDepartment().getId().equals(complaint.getDepartment().getId());
+
+        if (sameWard || sameDepartment) {
+            return;
+        }
+
+        throw new AccessDeniedException("You are not allowed to view this complaint");
     }
 
     private Ward findClosestWard(double lat, double lng) {
@@ -334,5 +404,50 @@ public class ComplaintServiceImpl implements ComplaintService {
         dist = Math.toDegrees(dist);
         dist = dist * 60 * 1.1515 * 1.609344;
         return dist;
+    }
+
+    private void ensureNotDuplicate(ComplaintCategory category, java.math.BigDecimal latitude, java.math.BigDecimal longitude) {
+        if (category == null || latitude == null || longitude == null) {
+            return;
+        }
+
+        List<Complaint> recentComplaints = complaintRepository.findRecentOpenByCategory(
+                category,
+                LocalDateTime.now().minusHours(1)
+        );
+
+        for (Complaint complaint : recentComplaints) {
+            if (complaint.getLatitude() == null || complaint.getLongitude() == null) {
+                continue;
+            }
+
+            double distanceKm = calculateDistance(
+                    latitude.doubleValue(),
+                    longitude.doubleValue(),
+                    complaint.getLatitude().doubleValue(),
+                    complaint.getLongitude().doubleValue());
+
+            if (distanceKm <= 0.1) {
+                throw new DuplicateComplaintException(
+                        "A similar open complaint already exists nearby. Please review existing tickets before submitting again.");
+            }
+        }
+    }
+
+    private ComplaintCategory mapSubmittedCategory(String rawCategory) {
+        if (rawCategory == null || rawCategory.isBlank()) {
+            return null;
+        }
+
+        return switch (rawCategory.trim().toUpperCase()) {
+            case "POTHOLE", "ROAD", "TRAFFIC" -> ComplaintCategory.ROAD;
+            case "STREETLIGHT", "ELECTRICITY" -> ComplaintCategory.ELECTRICITY;
+            case "DRAINAGE" -> ComplaintCategory.DRAINAGE;
+            case "POLLUTION", "SANITATION" -> ComplaintCategory.SANITATION;
+            case "TREE" -> ComplaintCategory.OTHER;
+            case "WATER" -> ComplaintCategory.WATER;
+            case "NOISE" -> ComplaintCategory.NOISE;
+            default -> ComplaintCategory.OTHER;
+        };
     }
 }

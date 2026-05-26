@@ -1,4 +1,5 @@
 import { get, post, put, del, postFormData } from './client'
+import { API_ENDPOINTS } from '@utils/constants'
 
 /**
  * Fetch all complaints with filters
@@ -37,7 +38,8 @@ export const fetchComplaint = async (complaintId) => {
  * @returns {Promise<PaginatedResponse<Complaint[]>>}
  */
 export const fetchUserComplaints = async (userEmail, page = 0, limit = 10) => {
-  return get(`/api/complaints/user/${userEmail}?page=${page}&limit=${limit}`)
+  void userEmail
+  return get(`${API_ENDPOINTS.COMPLAINTS.MY}?page=${page}&limit=${limit}`)
 }
 
 /**
@@ -48,7 +50,8 @@ export const fetchUserComplaints = async (userEmail, page = 0, limit = 10) => {
  * @returns {Promise<PaginatedResponse<Complaint[]>>}
  */
 export const fetchOfficerQueue = async (officerEmail, page = 0, limit = 10) => {
-  return get(`/api/complaints/officer/${officerEmail}?page=${page}&limit=${limit}`)
+  void officerEmail
+  return get(`${API_ENDPOINTS.COMPLAINTS.QUEUE}?page=${page}&limit=${limit}`)
 }
 
 /**
@@ -64,16 +67,19 @@ export const fetchOfficerQueue = async (officerEmail, page = 0, limit = 10) => {
 export const submitComplaint = async (complaintData, images = []) => {
   const formData = new FormData()
   formData.append(
-    'complaint',
+    'data',
     new Blob(
       [
         JSON.stringify({
           title: complaintData.title,
           description: complaintData.description,
+          category: complaintData.category,
           location: complaintData.location,
           wardId: complaintData.wardId,
           latitude: complaintData.latitude,
           longitude: complaintData.longitude,
+          incidentDate: complaintData.incidentDate || null,
+          incidentTime: complaintData.incidentTime || null,
         }),
       ],
       { type: 'application/json' }
@@ -84,7 +90,7 @@ export const submitComplaint = async (complaintData, images = []) => {
     formData.append(`images`, image)
   })
 
-  return postFormData('/api/complaints/submit', formData)
+  return postFormData(API_ENDPOINTS.COMPLAINTS.BASE, formData)
 }
 
 /**

@@ -71,6 +71,18 @@ public class GlobalExceptionHandler {
                 .body(ApiResponseDto.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(EmailVerificationRequiredException.class)
+    public ResponseEntity<ApiResponseDto<Void>> handleEmailVerificationRequired(EmailVerificationRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponseDto.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(DuplicateComplaintException.class)
+    public ResponseEntity<ApiResponseDto<Void>> handleDuplicateComplaint(DuplicateComplaintException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponseDto.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponseDto<Void>> handleGeneric(Exception ex) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);

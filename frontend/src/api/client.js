@@ -48,6 +48,11 @@ apiClient.interceptors.response.use(
       console.error('Access denied')
     }
 
+    // In production, always reject errors; only use mocks in development
+    if (import.meta.env.PROD) {
+      return Promise.reject(error)
+    }
+
     return Promise.reject(error)
   }
 )
@@ -59,7 +64,7 @@ apiClient.interceptors.response.use(
  * @property {*} [data] - Request body
  */
 
-// Global high-fidelity mock fallback data for offline development/testing
+// DEV-ONLY mock fallback data (only in development mode)
 const getMockData = (url) => {
   const cleanUrl = url.replace(/^[a-zA-Z]+:\/\/[^\/]+/, '') // remove domain if present
   
@@ -102,7 +107,7 @@ const getMockData = (url) => {
     ]
   }
   
-  if (cleanUrl.includes('/api/complaints/officer/')) {
+  if (cleanUrl.includes('/api/complaints/queue') || cleanUrl.includes('/api/complaints/officer/')) {
     const list = [
       {
         id: 9821,
@@ -163,6 +168,7 @@ const getMockData = (url) => {
   }
   
   if (
+    cleanUrl.includes('/api/complaints/my') ||
     cleanUrl.includes('/api/complaints/user/') || 
     cleanUrl.endsWith('/api/complaints') || 
     cleanUrl.includes('/api/complaints?')
@@ -288,7 +294,13 @@ export const get = async (url, config = {}) => {
   } catch (error) {
     // Gracefully catch any error (e.g. connection refused, 502 bad gateway proxy, 504 gateway timeout, or 500 error)
     const mock = getMockData(url)
-    if (mock !== null) {
+    // Only use mock fallback in development builds
+    if (!import.meta.env.PROD && mock !== null) {
+      try {
+        // Signal UI that dev mocks were used
+        window.__DEV_MOCK_USED__ = true
+        window.dispatchEvent(new Event('dev-mock-used'))
+      } catch (e) {}
       console.warn(`[Offline Demo Mode] Fallback to mock for GET ${url}:`, error.message)
       return mock
     }
@@ -308,8 +320,13 @@ export const post = async (url, data, config = {}) => {
     const response = await apiClient.post(url, data, config)
     return response.data
   } catch (error) {
-    console.warn(`[Offline Demo Mode] Intercepted POST write: ${url}`)
-    return { success: true, message: 'Mock action executed offline successfully', data }
+    // Only return mock response in development
+    if (!import.meta.env.PROD) {
+      console.warn(`[Offline Demo Mode] Intercepted POST write (dev mock): ${url}`)
+      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
+      return { success: true, message: 'Mock action executed offline successfully', data }
+    }
+    throw error
   }
 }
 
@@ -325,8 +342,12 @@ export const put = async (url, data, config = {}) => {
     const response = await apiClient.put(url, data, config)
     return response.data
   } catch (error) {
-    console.warn(`[Offline Demo Mode] Intercepted PUT write: ${url}`)
-    return { success: true, message: 'Mock action executed offline successfully', data }
+    if (!import.meta.env.PROD) {
+      console.warn(`[Offline Demo Mode] Intercepted PUT write (dev mock): ${url}`)
+      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
+      return { success: true, message: 'Mock action executed offline successfully', data }
+    }
+    throw error
   }
 }
 
@@ -342,8 +363,12 @@ export const patch = async (url, data, config = {}) => {
     const response = await apiClient.patch(url, data, config)
     return response.data
   } catch (error) {
-    console.warn(`[Offline Demo Mode] Intercepted PATCH write: ${url}`)
-    return { success: true, message: 'Mock action executed offline successfully', data }
+    if (!import.meta.env.PROD) {
+      console.warn(`[Offline Demo Mode] Intercepted PATCH write (dev mock): ${url}`)
+      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
+      return { success: true, message: 'Mock action executed offline successfully', data }
+    }
+    throw error
   }
 }
 
@@ -358,8 +383,12 @@ export const del = async (url, config = {}) => {
     const response = await apiClient.delete(url, config)
     return response.data
   } catch (error) {
-    console.warn(`[Offline Demo Mode] Intercepted DELETE write: ${url}`)
-    return { success: true, message: 'Mock action executed offline successfully' }
+    if (!import.meta.env.PROD) {
+      console.warn(`[Offline Demo Mode] Intercepted DELETE write (dev mock): ${url}`)
+      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
+      return { success: true, message: 'Mock action executed offline successfully' }
+    }
+    throw error
   }
 }
 
@@ -380,11 +409,15 @@ export const postFormData = async (url, formData, config = {}) => {
     })
     return response.data
   } catch (error) {
-    console.warn(`[Offline Demo Mode] Intercepted mock file upload: ${url}`)
-    return { 
-      success: true, 
-      url: 'https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80' 
+    if (!import.meta.env.PROD) {
+      console.warn(`[Offline Demo Mode] Intercepted mock file upload: ${url}`)
+      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
+      return { 
+        success: true, 
+        url: 'https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80' 
+      }
     }
+    throw error
   }
 }
 

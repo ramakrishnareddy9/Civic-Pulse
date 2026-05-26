@@ -24,6 +24,10 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private Boolean emailVerified = false;
+
     @Column(nullable = false)
     private String password;
 
@@ -31,6 +35,13 @@ public class User {
     private String fullName;
 
     private String phone;
+
+    @Column(columnDefinition = "TEXT")
+    private String address;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ward_id")
+    private Ward ward;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

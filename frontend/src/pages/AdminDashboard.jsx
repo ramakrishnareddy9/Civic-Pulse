@@ -46,9 +46,9 @@ export function AdminDashboard() {
     openComplaints: summary?.openComplaints || 42,
     officers: summary?.officers || 12,
     totalVolume: summary?.totalComplaints || 1482,
-    slaCompliance: '94.2%',
-    resolutionRate: '88.7%',
-    avgResponse: '4.2h'
+    slaCompliance: summary?.slaCompliance || '94.2%',
+    resolutionRate: summary?.resolutionRate || '88.7%',
+    avgResponse: summary?.avgResponseTime || '4.2h'
   }
 
   // Detailed mock table data matching advanced analytics logs

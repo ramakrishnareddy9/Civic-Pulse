@@ -38,6 +38,11 @@ public interface ComplaintService extends
      * Get current user's complaints (legacy convenience method).
      */
     ComplaintResponseDto getComplaint(Long id);  // Maps to getById()
+
+    /**
+     * Get a complaint with access checks for the requesting user.
+     */
+    ComplaintResponseDto getComplaint(Long id, String requesterEmail);
     
     /**
      * Get citizen's complaints page (legacy convenience method).

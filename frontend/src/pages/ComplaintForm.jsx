@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useComplaints } from '@hooks/useComplaints'
 import { useNotification } from '@hooks/useNotification'
-import { ROUTES } from '@utils/constants'
+import { ROUTES, COMPLAINT_CATEGORIES, COMPLAINT_CATEGORY_MAP } from '@utils/constants'
 import CivicMap from '@components/common/CivicMap'
 import { fetchWards } from '@api/admin'
 
@@ -46,18 +46,6 @@ export function ComplaintForm() {
     }
     loadWards()
   }, [])
-
-  const categories = [
-    { value: 'POTHOLE', label: 'Pothole/Road Damage' },
-    { value: 'STREETLIGHT', label: 'Streetlight Issue' },
-    { value: 'DRAINAGE', label: 'Drainage Problem' },
-    { value: 'POLLUTION', label: 'Pollution/Cleanliness' },
-    { value: 'TRAFFIC', label: 'Traffic Concern' },
-    { value: 'TREE', label: 'Tree/Vegetation' },
-    { value: 'WATER', label: 'Water Supply' },
-    { value: 'ELECTRICITY', label: 'Electricity Issue' },
-    { value: 'OTHER', label: 'Other' },
-  ]
 
   // Euclidean distance helper for ward resolution
   const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -148,6 +136,10 @@ export function ComplaintForm() {
       // Images are optional - only check privacy agreement
       if (!formData.privacyAgree) newErrors.privacyAgree = 'You must agree to the privacy declaration'
     }
+    if (step === 4) {
+      // Step 4 is review - no additional validation needed
+      return true
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -185,17 +177,23 @@ export function ComplaintForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!validateStep(4) && !validateStep(3)) return
+    // Validate all required steps before submission
+    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return
 
     setLoading(true)
     try {
+      // Map frontend category to backend enum
+      const backendCategory = COMPLAINT_CATEGORY_MAP[formData.category] || formData.category
+      
       const result = await submit(
         {
           title: formData.title,
           description: formData.description,
-          category: formData.category,
+          category: backendCategory,
           wardId: formData.ward ? Number(formData.ward) : null,
           location: formData.location || null,
+          incidentDate: formData.incidentDate || null,
+          incidentTime: formData.incidentTime || null,
           latitude: formData.latitude ? Number(formData.latitude) : null,
           longitude: formData.longitude ? Number(formData.longitude) : null,
         },

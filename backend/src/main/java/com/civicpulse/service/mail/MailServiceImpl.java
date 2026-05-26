@@ -54,6 +54,59 @@ public class MailServiceImpl implements MailService {
 
     @Async
     @Override
+    public void sendEmailVerificationEmail(String toEmail, String citizenName, String verificationToken) {
+        try {
+            log.info("Preparing email verification email for {}", toEmail);
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            Context context = new Context();
+            context.setVariable("citizenName", citizenName);
+            context.setVariable("verificationToken", verificationToken);
+            context.setVariable("verificationLink", "http://localhost:8080/api/auth/verify-email?token=" + verificationToken);
+
+            String htmlContent = templateEngine.process("mail/email-verification", context);
+
+            helper.setTo(toEmail);
+            helper.setSubject("Verify your Civic Pulse email address");
+            helper.setText(htmlContent, true);
+            helper.setFrom("no-reply@civicpulse.gov.in");
+
+            mailSender.send(mimeMessage);
+            log.info("Email verification sent successfully to {}", toEmail);
+        } catch (Exception ex) {
+            log.error("Failed to dispatch verification email for {}: {}", toEmail, ex.getMessage(), ex);
+        }
+    }
+
+    @Async
+    @Override
+    public void sendPasswordResetEmail(String toEmail, String citizenName, String resetToken) {
+        try {
+            log.info("Preparing password reset email for {}", toEmail);
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            Context context = new Context();
+            context.setVariable("citizenName", citizenName);
+            context.setVariable("resetToken", resetToken);
+
+            String htmlContent = templateEngine.process("mail/password-reset", context);
+
+            helper.setTo(toEmail);
+            helper.setSubject("Civic Pulse password reset request");
+            helper.setText(htmlContent, true);
+            helper.setFrom("no-reply@civicpulse.gov.in");
+
+            mailSender.send(mimeMessage);
+            log.info("Password reset email sent successfully to {}", toEmail);
+        } catch (Exception ex) {
+            log.error("Failed to dispatch password reset email for {}: {}", toEmail, ex.getMessage(), ex);
+        }
+    }
+
+    @Async
+    @Override
     public void sendComplaintStatusUpdateEmail(String toEmail, String citizenName, Long complaintId, String title, String oldStatus, String newStatus, String notes) {
         try {
             log.info("Preparing asynchronous status update email for #CP-{} to {}", complaintId, toEmail);

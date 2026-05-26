@@ -14,7 +14,7 @@ const PASSWORD_REQUIREMENTS = [
 
 export function RegisterPage() {
   const navigate = useNavigate()
-  const { register } = useAuth()
+  const { register, error: authError } = useAuth()
   const { success: showSuccess, error: showError } = useNotification()
 
   const [formData, setFormData] = useState({
@@ -64,14 +64,13 @@ export function RegisterPage() {
       const success = await register({
         fullName: formData.fullName,
         email: formData.email,
-        role: formData.role,
         password: formData.password,
       })
       if (success) {
-        showSuccess('Account created successfully! Welcome to Civic Pulse.')
-        // Redirect to appropriate dashboard
-        if (formData.role === 'CITIZEN') navigate(ROUTES.CITIZEN.DASHBOARD)
-        else navigate(ROUTES.DASHBOARD)
+        showSuccess('Account created. Check your email to verify your address before logging in.')
+        navigate(ROUTES.LOGIN)
+      } else {
+        showError(authError || 'Registration failed. Please try again.')
       }
     } catch (err) {
       showError(err?.message || 'Registration failed. Please try again.')

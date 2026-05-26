@@ -5,6 +5,8 @@ import com.civicpulse.model.enums.ComplaintStatus;
 import com.civicpulse.model.enums.Priority;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,6 +20,8 @@ public record ComplaintResponseDto(
         BigDecimal latitude,
         BigDecimal longitude,
         String address,
+        LocalDate incidentDate,
+        LocalTime incidentTime,
         String wardName,
         Long wardId,
         String citizenName,

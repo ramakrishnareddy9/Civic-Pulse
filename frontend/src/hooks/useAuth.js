@@ -49,13 +49,13 @@ export const useAuth = () => {
             createdAt: new Date().toISOString(),
           }
           const dummyToken = 'dummy-jwt-token-for-local-testing'
-          setAuth(dummyUser, dummyToken)
+          setAuth(dummyUser, dummyToken, null)
           localStorage.setItem('token', dummyToken)
           return true
         }
 
-        const { user: userData, token: authToken } = await authService.login(email, password)
-        setAuth(userData, authToken)
+        const { user: userData, token: authToken, refreshToken: authRefreshToken } = await authService.login(email, password)
+        setAuth(userData, authToken, authRefreshToken)
         return true
       } catch (err) {
         const apiError = handleApiError(err)
@@ -78,8 +78,7 @@ export const useAuth = () => {
       try {
         setLoading(true)
         setError(null)
-        const { user: newUser, token: authToken } = await authService.register(userData)
-        setAuth(newUser, authToken)
+        await authService.register(userData)
         return true
       } catch (err) {
         const apiError = handleApiError(err)
@@ -89,7 +88,7 @@ export const useAuth = () => {
         setLoading(false)
       }
     },
-    [setLoading, setError, setAuth]
+    [setLoading, setError]
   )
 
   /**

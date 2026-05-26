@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useComplaints } from '@hooks/useComplaints'
 import { useAuth } from '@hooks/useAuth'
+import { useAuthStore } from '@store/authStore'
 import { useNotification } from '@hooks/useNotification'
 import { ROUTES } from '@utils/constants'
 import { subscribeTopic, disconnectSocket, connectSocket } from '@/services/socket'
@@ -40,12 +41,18 @@ export function OfficerDashboard() {
 
   // Sound alert state
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const soundEnabledRef = useRef(soundEnabled)
+
+  // Keep ref in sync without triggering re-connections
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled
+  }, [soundEnabled])
 
   useEffect(() => {
     loadComplaints()
 
     // Connect socket with auth token and subscribe to complaint updates
-    const token = localStorage.getItem('token')
+    const { token } = useAuthStore.getState()
     connectSocket(token)
     const unsubscribe = subscribeTopic('/topic/complaints', (msg) => {
       const { type, complaint } = msg || {}
@@ -54,7 +61,7 @@ export function OfficerDashboard() {
       // If it's a new critical/high priority complaint, trigger emergency banner
       if (type === 'CREATED' && (complaint.priority === 'CRITICAL' || complaint.priority === 'HIGH')) {
         setNewEmergencyAlert(complaint)
-        if (soundEnabled) {
+        if (soundEnabledRef.current) {
           playBeep()
         }
       }
@@ -71,7 +78,7 @@ export function OfficerDashboard() {
       unsubscribe()
       disconnectSocket()
     }
-  }, [soundEnabled])
+  }, [])
 
   // Recalculate stats when complaints list changes
   useEffect(() => {

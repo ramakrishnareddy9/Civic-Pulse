@@ -46,6 +46,11 @@ public class OfficerAdminServiceImpl implements OfficerAdminService {
             throw new IllegalArgumentException("Officer email already exists: " + dto.email());
         }
 
+        UserRole role = dto.role() != null ? dto.role() : UserRole.OFFICER;
+        if (role != UserRole.OFFICER && role != UserRole.DEPT_HEAD) {
+            throw new IllegalArgumentException("Officer onboarding supports only OFFICER or DEPT_HEAD roles");
+        }
+
         // Fetch dependencies
         Department department = departmentRepository.findById(dto.departmentId())
                 .orElseThrow(() -> new IllegalArgumentException("Department not found: " + dto.departmentId()));
@@ -58,7 +63,7 @@ public class OfficerAdminServiceImpl implements OfficerAdminService {
                 .email(dto.email())
                 .fullName(dto.fullName())
                 .password(passwordEncoder.encode(dto.password() != null ? dto.password() : DEFAULT_PASSWORD))
-                .role(UserRole.OFFICER)
+            .role(role)
                 .build();
         user = userRepository.save(user);
 

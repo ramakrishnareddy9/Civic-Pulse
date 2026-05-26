@@ -1,0 +1,22 @@
+jwt:
+  secret: test-jwt-secret-key-change-in-tests-32chars
+  expiration-ms: 86400000
+  refresh-expiration-ms: 604800000
+
+spring:
+  ai:
+    openai:
+      api-key: test-api-key
+  datasource:
+    url: jdbc:h2:mem:civicpulse;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  mail:
+    host: localhost
+    port: 2525
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false

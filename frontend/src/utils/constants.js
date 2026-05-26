@@ -11,8 +11,10 @@ export const API_ENDPOINTS = {
   COMPLAINTS: {
     BASE: '/api/complaints',
     DETAIL: (id) => `/api/complaints/${id}`,
-    USER: (email) => `/api/complaints/user/${email}`,
-    OFFICER: (email) => `/api/complaints/officer/${email}`,
+    MY: '/api/complaints/my',
+    QUEUE: '/api/complaints/queue',
+    USER_BY_EMAIL: (email) => `/api/complaints/user/${email}`,
+    OFFICER_BY_EMAIL: (email) => `/api/complaints/officer/${email}`,
     ANALYTICS: '/api/analytics/complaints',
   },
   ADMIN: {
@@ -88,6 +90,38 @@ export const ERRORS = {
 }
 
 /**
+ * Complaint category mapping (frontend -> backend enum)
+ * Backend enum: ROAD, WATER, ELECTRICITY, SANITATION, DRAINAGE, NOISE, OTHER
+ */
+export const COMPLAINT_CATEGORY_MAP = {
+  'POTHOLE': 'ROAD',
+  'TRAFFIC': 'ROAD',
+  'ROAD': 'ROAD',
+  'STREETLIGHT': 'ELECTRICITY',
+  'ELECTRICITY': 'ELECTRICITY',
+  'DRAINAGE': 'DRAINAGE',
+  'WATER': 'WATER',
+  'POLLUTION': 'SANITATION',
+  'SANITATION': 'SANITATION',
+  'NOISE': 'NOISE',
+  'TREE': 'OTHER',
+  'OTHER': 'OTHER',
+}
+
+export const COMPLAINT_CATEGORIES = [
+  { value: 'POTHOLE', label: 'Pothole/Road Damage' },
+  { value: 'TRAFFIC', label: 'Traffic Concern' },
+  { value: 'STREETLIGHT', label: 'Streetlight Issue' },
+  { value: 'DRAINAGE', label: 'Drainage Problem' },
+  { value: 'WATER', label: 'Water Supply' },
+  { value: 'ELECTRICITY', label: 'Electricity Issue' },
+  { value: 'POLLUTION', label: 'Pollution/Cleanliness' },
+  { value: 'NOISE', label: 'Noise Issue' },
+  { value: 'TREE', label: 'Tree/Vegetation' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+/**
  * Success messages
  */
 export const SUCCESS = {
@@ -95,6 +129,6 @@ export const SUCCESS = {
   REGISTER: 'Registered successfully. Welcome!',
   COMPLAINT_SUBMITTED: 'Complaint submitted successfully.',
   COMPLAINT_UPDATED: 'Complaint updated successfully.',
-  PROFILE_UPDATED: 'Profile updated successfully.',
+  PROFILE_UPDATED: 'Profile updated successfully.'
   PASSWORD_CHANGED: 'Password changed successfully.',
 }
