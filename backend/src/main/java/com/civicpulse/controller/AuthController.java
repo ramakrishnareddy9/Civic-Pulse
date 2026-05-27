@@ -8,6 +8,7 @@ import com.civicpulse.model.dto.response.UserResponseDto;
 import com.civicpulse.model.entity.User;
 import com.civicpulse.model.enums.UserRole;
 import com.civicpulse.repository.UserRepository;
+import com.civicpulse.repository.WardRepository;
 import com.civicpulse.security.JwtUtil;
 import com.civicpulse.service.mail.MailService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +41,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final RedisTemplate<String, String> redisTemplate;
     private final MailService mailService;
+        private final WardRepository wardRepository;
 
     @PostMapping("/register")
     @Operation(summary = "Register a new citizen account")
@@ -186,6 +188,40 @@ public class AuthController {
         ));
     }
 
+    public record UpdateProfileDto(String fullName, String phone, String address, Long wardId) {}
+
+    @PutMapping("/me")
+    @Operation(summary = "Update current authenticated user's profile")
+    public ResponseEntity<ApiResponseDto<UserResponseDto>> updateMe(@Valid @RequestBody UpdateProfileDto dto,
+                                                                     Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponseDto.error("Not authenticated"));
+        }
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        if (dto.fullName() != null && !dto.fullName().isBlank()) user.setFullName(dto.fullName());
+        if (dto.phone() != null) user.setPhone(dto.phone());
+        if (dto.address() != null) user.setAddress(dto.address());
+                if (dto.wardId() != null) {
+                        try {
+                                wardRepository.findById(dto.wardId()).ifPresent(user::setWard);
+                        } catch (Exception ignored) {}
+                }
+
+        user = userRepository.save(user);
+
+        return ResponseEntity.ok(ApiResponseDto.success(
+                new UserResponseDto(
+                        user.getId(), user.getEmail(), user.getFullName(), user.getRole().name(), user.getPhone(), user.getEmailVerified(), user.getAddress(),
+                        user.getWard() != null ? user.getWard().getId() : null,
+                        user.getWard() != null ? user.getWard().getName() : null
+                ),
+                "Profile updated"
+        ));
+    }
+
     @PostMapping("/refresh")
     @Operation(summary = "Refresh access token using a refresh token")
     public ResponseEntity<ApiResponseDto<JwtResponseDto>> refresh(
@@ -279,5 +315,29 @@ public class AuthController {
         redisTemplate.delete("password-reset:" + body.token());
 
         return ResponseEntity.ok(ApiResponseDto.success(null, "Password reset successful"));
+    }
+    public record ResendVerificationRequestDto(
+            @jakarta.validation.constraints.NotBlank
+            String email
+    ) {}
+
+    @PostMapping("/resend-verification")
+    @Operation(summary = "Resend email verification link for an unverified account")
+    public ResponseEntity<ApiResponseDto<Void>> resendVerification(
+            @Valid @RequestBody ResendVerificationRequestDto body) {
+        userRepository.findByEmail(body.email()).ifPresent(user -> {
+            if (Boolean.TRUE.equals(user.getEmailVerified())) {
+                return; // already verified — silently ignore to prevent enumeration
+            }
+            String verificationToken = UUID.randomUUID().toString().replace("-", "");
+            redisTemplate.opsForValue().set(
+                    "email-verify:" + verificationToken,
+                    user.getEmail(),
+                    24, TimeUnit.HOURS);
+            mailService.sendEmailVerificationEmail(user.getEmail(), user.getFullName(), verificationToken);
+            log.info("Resent verification email to {}", user.getEmail());
+        });
+        return ResponseEntity.ok(ApiResponseDto.success(null,
+                "If the email exists and is unverified, a new verification link has been sent."));
     }
 }

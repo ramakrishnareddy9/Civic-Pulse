@@ -11,6 +11,8 @@ const STATUS_CONFIG = {
   IN_PROGRESS: { label: 'In Progress', bg: '#dbeafe', color: '#1e40af', icon: 'autorenew', timeline: 'Under Investigation' },
   RESOLVED: { label: 'Resolved', bg: '#d1fae5', color: '#065f46', icon: 'check_circle', timeline: 'Issue Resolved' },
   CLOSED: { label: 'Closed', bg: '#f1f5f9', color: '#475569', icon: 'archive', timeline: 'Case Closed' },
+  REOPENED: { label: 'Reopened', bg: '#ffedd5', color: '#9a3412', icon: 'report_problem', timeline: 'Citizen Disputed — Reopened' },
+  REJECTED: { label: 'Rejected', bg: '#fee2e2', color: '#991b1b', icon: 'cancel', timeline: 'Complaint Rejected' },
 }
 
 const PRIORITY_CONFIG = {
@@ -58,7 +60,7 @@ function SLACounter({ slaDueDate, status }) {
 export function ComplaintDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentComplaint, loading, error, fetchDetail, deleteComplaint, updateComplaintStatus } = useComplaints()
+  const { currentComplaint, loading, error, fetchDetail, deleteComplaint, updateComplaintStatus, confirmResolution, disputeResolution } = useComplaints()
   const { user } = useAuth()
   const { error: showError, success } = useNotification()
 
@@ -66,9 +68,14 @@ export function ComplaintDetail() {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [noteInput, setNoteInput] = useState('')
+  const [showConfirming, setShowConfirming] = useState(false)
+  const [showDisputeModal, setShowDisputeModal] = useState(false)
+  const [disputeReason, setDisputeReason] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [activeImage, setActiveImage] = useState(0)
+  const [satisfactionRating, setSatisfactionRating] = useState(0)
+  const [hoverRating, setHoverRating] = useState(0)
 
   useEffect(() => {
     if (id) fetchDetail(id)
@@ -166,6 +173,41 @@ export function ComplaintDetail() {
       showError('Failed to update status')
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    setShowConfirming(true)
+    try {
+      const ok = await confirmResolution(complaint.id, satisfactionRating || null)
+      if (ok) {
+        success('Thank you — resolution confirmed')
+        fetchDetail(id)
+      } else {
+        showError('Failed to confirm resolution')
+      }
+    } catch (err) {
+      showError('Failed to confirm resolution')
+    } finally {
+      setShowConfirming(false)
+    }
+  }
+
+  const handleDispute = async () => {
+    if (!disputeReason.trim()) { showError('Please provide a reason to dispute'); return }
+    setShowDisputeModal(false)
+    try {
+      const ok = await disputeResolution(complaint.id, disputeReason)
+      if (ok) {
+        success('Dispute submitted — the case has been reopened')
+        fetchDetail(id)
+      } else {
+        showError('Failed to submit dispute')
+      }
+    } catch (err) {
+      showError('Failed to submit dispute')
+    } finally {
+      setDisputeReason('')
     }
   }
 
@@ -482,6 +524,60 @@ export function ComplaintDetail() {
                     Withdraw Complaint
                   </button>
                 )}
+                {isOwner && complaint.status === 'RESOLVED' && (
+                  <>
+                    <button
+                      onClick={() => setShowDisputeModal(true)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 text-sm font-bold transition-all hover:bg-red-50"
+                      style={{ borderColor: '#dc2626', color: '#dc2626' }}
+                    >
+                      <span className="material-symbols-outlined text-sm">report_problem</span>
+                      Dispute Resolution
+                    </button>
+
+                    {/* Star rating + confirm block */}
+                    <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: 'var(--gov-border)', background: '#f8fafc' }}>
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Rate your satisfaction</p>
+                      <div className="flex gap-1.5 justify-center">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setSatisfactionRating(star === satisfactionRating ? 0 : star)}
+                            onMouseEnter={() => setHoverRating(star)}
+                            onMouseLeave={() => setHoverRating(0)}
+                            className="text-3xl transition-transform hover:scale-110"
+                            aria-label={`Rate ${star} out of 5`}
+                          >
+                            <span
+                              className="material-symbols-outlined text-3xl"
+                              style={{
+                                color: star <= (hoverRating || satisfactionRating) ? '#f59e0b' : '#d1d5db',
+                                fontVariationSettings: star <= (hoverRating || satisfactionRating) ? "'FILL' 1" : "'FILL' 0",
+                              }}
+                            >
+                              star
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {satisfactionRating > 0 && (
+                        <p className="text-xs text-center text-gray-500">
+                          {['', 'Very Unsatisfied', 'Unsatisfied', 'Neutral', 'Satisfied', 'Very Satisfied'][satisfactionRating]}
+                        </p>
+                      )}
+                      <button
+                        onClick={handleConfirm}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
+                        style={{ background: 'var(--gov-green, #15803d)', color: 'white' }}
+                        disabled={showConfirming}
+                      >
+                        <span className="material-symbols-outlined text-sm">thumb_up</span>
+                        {showConfirming ? 'Confirming...' : 'Confirm Resolution'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -610,3 +706,49 @@ export function ComplaintDetail() {
     </div>
   )
 }
+
+      {/* Dispute Modal */}
+      {showDisputeModal && (
+        <div className="modal-backdrop" onClick={() => setShowDisputeModal(false)}>
+          <div className="modal-content p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.07)' }}>
+                <span className="material-symbols-outlined" style={{ color: '#dc2626' }}>report_problem</span>
+              </div>
+              <div>
+                <h3 className="font-black text-lg" style={{ color: 'var(--gov-navy)' }}>Dispute Resolution</h3>
+                <p className="text-xs text-gray-500">Explain why the resolution is unsatisfactory for case #{`CP-${complaint.id}`}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <textarea
+                  value={disputeReason}
+                  onChange={e => setDisputeReason(e.target.value)}
+                  className="gov-input resize-none"
+                  rows={5}
+                  placeholder="Describe the issue and why you disagree with the resolution..."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowDisputeModal(false)}
+                className="flex-1 py-2.5 rounded-xl border text-sm font-bold transition-colors hover:bg-gray-50"
+                style={{ borderColor: 'var(--gov-border)', color: 'var(--gov-text-muted)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDispute}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+                style={{ background: '#dc2626', color: 'white' }}
+              >
+                Submit Dispute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}

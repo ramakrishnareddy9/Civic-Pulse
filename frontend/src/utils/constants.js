@@ -129,6 +129,6 @@ export const SUCCESS = {
   REGISTER: 'Registered successfully. Welcome!',
   COMPLAINT_SUBMITTED: 'Complaint submitted successfully.',
   COMPLAINT_UPDATED: 'Complaint updated successfully.',
-  PROFILE_UPDATED: 'Profile updated successfully.'
+  PROFILE_UPDATED: 'Profile updated successfully.',
   PASSWORD_CHANGED: 'Password changed successfully.',
 }

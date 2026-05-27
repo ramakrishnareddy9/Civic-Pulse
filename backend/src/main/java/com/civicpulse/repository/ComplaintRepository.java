@@ -36,6 +36,10 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
         List<Complaint> findSlaBreached(@Param("now") LocalDateTime now,
                          @Param("closedStatuses") List<ComplaintStatus> closedStatuses);
 
+    @Query("SELECT c FROM Complaint c WHERE c.isDeleted = false AND c.status IN ('OPEN', 'IN_PROGRESS') " +
+            "AND c.slaDeadline BETWEEN :from AND :to")
+    List<Complaint> findBySlaDeadlineBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
     // Crisis detection: count complaints by category+ward in last N minutes
     @Query(value = """
         SELECT c.category, c.ward_id, COUNT(*) as cnt

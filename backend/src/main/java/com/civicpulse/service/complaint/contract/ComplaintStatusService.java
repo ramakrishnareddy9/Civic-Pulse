@@ -32,4 +32,21 @@ public interface ComplaintStatusService {
      * @throws com.civicpulse.exception.ComplaintNotFoundException If not found
      */
     void softDelete(Long complaintId);
+
+    /**
+     * Citizen confirms that a RESOLVED complaint is satisfactory.
+     * @param complaintId complaint id
+     * @param userEmail citizen email
+     * @return updated complaint DTO
+     */
+    com.civicpulse.model.dto.response.ComplaintResponseDto confirmResolution(Long complaintId, Integer rating, String userEmail);
+
+    /**
+     * Citizen disputes a RESOLVED complaint and reopens it.
+     * @param complaintId complaint id
+     * @param reason dispute reason
+     * @param userEmail citizen email
+     * @return updated complaint DTO
+     */
+    com.civicpulse.model.dto.response.ComplaintResponseDto disputeResolution(Long complaintId, String reason, String userEmail);
 }

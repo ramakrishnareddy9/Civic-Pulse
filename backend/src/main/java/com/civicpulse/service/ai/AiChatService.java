@@ -27,13 +27,17 @@ public class AiChatService {
     private final LlmProvider llmProvider;
     private final VectorStore vectorStore;
 
-    public String chat(String userId, String userMessage) {
+    public String chat(String userId, String userMessage, java.util.Map<String, String> metadataFilters) {
         try {
             // 1. Retrieve relevant complaint documents from vector store
-            List<Document> relevantDocs = vectorStore.similaritySearch(
-                    SearchRequest.query(userMessage)
-                            .withTopK(5)
-            );
+            var builder = SearchRequest.query(userMessage).withTopK(5);
+            if (metadataFilters != null && !metadataFilters.isEmpty()) {
+                String filterExpr = metadataFilters.entrySet().stream()
+                        .map(entry -> entry.getKey() + " == '" + entry.getValue() + "'")
+                        .collect(java.util.stream.Collectors.joining(" && "));
+                builder = builder.withFilterExpression(filterExpr);
+            }
+            List<Document> relevantDocs = vectorStore.similaritySearch(builder);
 
             String context = relevantDocs.stream()
                     .map(Document::getContent)

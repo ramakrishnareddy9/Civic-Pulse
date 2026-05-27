@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useComplaints } from '@hooks/useComplaints'
+import { useAuth } from '@hooks/useAuth'
 import { useNotification } from '@hooks/useNotification'
 import { ROUTES, COMPLAINT_CATEGORIES, COMPLAINT_CATEGORY_MAP } from '@utils/constants'
 import CivicMap from '@components/common/CivicMap'
@@ -34,6 +35,8 @@ export function ComplaintForm() {
 
   const [imagePreview, setImagePreview] = useState([])
   const [dbWards, setDbWards] = useState([])
+  const [duplicates, setDuplicates] = useState([])
+  const [showMergeModal, setShowMergeModal] = useState(false)
 
   useEffect(() => {
     const loadWards = async () => {
@@ -46,6 +49,30 @@ export function ComplaintForm() {
     }
     loadWards()
   }, [])
+
+  const { isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    const prefillProfile = async () => {
+      if (!isAuthenticated) return
+      try {
+        const auth = await import('@api/auth')
+        const res = await auth.getCurrentUser()
+        const payload = res?.data ?? res
+        if (payload) {
+          setFormData((prev) => ({
+            ...prev,
+            location: prev.location || payload.address || prev.location,
+            // map ward id to string
+            ward: prev.ward || (payload.wardId ? String(payload.wardId) : prev.ward),
+          }))
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    prefillProfile()
+  }, [isAuthenticated])
 
   // Euclidean distance helper for ward resolution
   const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -179,7 +206,11 @@ export function ComplaintForm() {
     e.preventDefault()
     // Validate all required steps before submission
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return
-
+    // If duplicates detected, show merge modal instead of submitting immediately
+    if (duplicates && duplicates.length > 0) {
+      setShowMergeModal(true)
+      return
+    }
     setLoading(true)
     try {
       // Map frontend category to backend enum
@@ -210,6 +241,25 @@ export function ComplaintForm() {
   }
 
   const handleChange = (e) => {
+
+      const checkDuplicates = async (lat, lng) => {
+        try {
+          if (!formData.category) return
+          // incident date/time prefer form values
+          const payload = {
+            category: formData.category,
+            latitude: Number(lat),
+            longitude: Number(lng),
+            incidentDate: formData.incidentDate || null,
+            incidentTime: formData.incidentTime || null,
+          }
+          const res = await (await import('@api/complaints')).detectDuplicates(payload)
+          const data = res?.data ?? res
+          setDuplicates(data || [])
+        } catch (err) {
+          console.warn('Duplicate check failed', err)
+        }
+      }
     const { name, value, type, checked } = e.target
     setFormData((prev) => ({
       ...prev,
@@ -220,6 +270,16 @@ export function ComplaintForm() {
         ...prev,
         [name]: '',
       }))
+    }
+  }
+
+  const continueSubmitDespiteDuplicates = async () => {
+    setShowMergeModal(false)
+    // proceed with the normal submit flow
+    try {
+      await handleSubmit(new Event('submit'))
+    } catch (err) {
+      // handleSubmit already manages errors
     }
   }
 
@@ -455,6 +515,8 @@ export function ComplaintForm() {
                         if (errors.ward) {
                           setErrors((prev) => ({ ...prev, ward: '' }))
                         }
+                        // run duplicate detection when category is chosen
+                        checkDuplicates(lat, lng)
                       }}
                       height="350px"
                     />
@@ -516,6 +578,25 @@ export function ComplaintForm() {
               {/* STEP 3: Attachments & Privacy */}
               {currentStep === 3 && (
                 <div className="space-y-lg">
+                  {duplicates && duplicates.length > 0 && (
+                    <div className="p-4 mb-4 rounded-lg bg-yellow-50 border border-yellow-200">
+                      <h4 className="font-bold">Possible duplicate reports detected</h4>
+                      <p className="text-sm text-gray-600">We found {duplicates.length} similar recent report(s) nearby. Please review before submitting.</p>
+                      <ul className="mt-2 list-disc pl-5 text-sm">
+                        {duplicates.map(d => (
+                          <li key={d.id} className="truncate flex items-center justify-between gap-3">
+                            <div className="truncate">
+                              <a href={`/complaints/${d.id}`} className="text-primary underline mr-2">#{d.id}</a> — {d.title} ({d.wardName || 'No ward'})
+                            </div>
+                            <div className="flex-shrink-0 flex gap-2">
+                              <a href={`/complaints/${d.id}`} className="text-xs px-2 py-1 border rounded text-primary">Open</a>
+                              <button onClick={() => { setShowMergeModal(true) }} className="text-xs px-2 py-1 bg-primary text-on-primary rounded">Review</button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="space-y-xs">
                     <h2 className="font-headline-md text-headline-md text-primary font-bold">Attachments &amp; Privacy</h2>
                     <p className="text-on-surface-variant">Photos help us resolve issues faster. Your privacy is important to us.</p>
@@ -687,6 +768,33 @@ export function ComplaintForm() {
         </div>
 
       </div>
+        {/* Merge / Duplicate Modal */}
+        {showMergeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowMergeModal(false)} />
+            <div className="bg-white rounded-xl p-6 max-w-lg w-full z-10 border border-outline-variant">
+              <h3 className="font-bold text-lg mb-2">Potential Duplicate Reports</h3>
+              <p className="text-sm text-gray-600 mb-4">We found similar recent reports nearby. You can open an existing ticket to view details or continue to submit a new report.</p>
+              <div className="space-y-3 max-h-48 overflow-auto mb-4">
+                {duplicates.map(d => (
+                  <div key={d.id} className="flex items-center justify-between p-2 border rounded">
+                    <div className="truncate">
+                      <a href={`/complaints/${d.id}`} className="text-primary font-semibold">#{d.id}</a>
+                      <div className="text-sm text-gray-600 truncate">{d.title} • {d.wardName || 'No ward'}</div>
+                    </div>
+                    <div className="flex gap-2 ml-3">
+                      <a className="px-3 py-1 border rounded text-xs" href={`/complaints/${d.id}`}>Open</a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShowMergeModal(false)} className="px-4 py-2 border rounded">Cancel</button>
+                <button onClick={() => continueSubmitDespiteDuplicates()} className="px-4 py-2 bg-primary text-on-primary rounded">Submit Anyway</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Info Grid */}
       <div className="w-full mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-left">

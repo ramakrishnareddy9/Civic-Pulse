@@ -107,6 +107,31 @@ public class ComplaintController {
                 "Status updated"));
     }
 
+        public record ConfirmDto(Integer rating) {}
+
+        @PostMapping("/{id}/confirm")
+        @Operation(summary = "Citizen confirms a RESOLVED complaint with optional 1-5 satisfaction rating")
+        public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> confirmResolution(
+                        @PathVariable Long id,
+                        @RequestBody(required = false) ConfirmDto body,
+                        @AuthenticationPrincipal UserDetails userDetails) {
+                Integer rating = body != null ? body.rating() : null;
+                ComplaintResponseDto dto = complaintService.confirmResolution(id, rating, userDetails.getUsername());
+                return ResponseEntity.ok(ApiResponseDto.success(dto, "Thank you — your confirmation is recorded."));
+        }
+
+        public record DisputeDto(String reason) {}
+
+        @PostMapping("/{id}/dispute")
+        @Operation(summary = "Citizen disputes a RESOLVED complaint and reopens it")
+        public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> disputeResolution(
+                        @PathVariable Long id,
+                        @RequestBody DisputeDto dto,
+                        @AuthenticationPrincipal UserDetails userDetails) {
+                ComplaintResponseDto res = complaintService.disputeResolution(id, dto.reason(), userDetails.getUsername());
+                return ResponseEntity.ok(ApiResponseDto.success(res, "Your dispute has been recorded and the case has been reopened."));
+        }
+
     @GetMapping("/user/{email}")
     @Operation(summary = "Get user's complaints by email parameter")
     public ResponseEntity<ApiResponseDto<Page<ComplaintResponseDto>>> getByUserEmail(
@@ -181,6 +206,23 @@ public class ComplaintController {
         
         return ResponseEntity.ok(ApiResponseDto.success(slaInfo));
     }
+
+        public record DuplicateCheckDto(String category, java.math.BigDecimal latitude, java.math.BigDecimal longitude, java.time.LocalDate incidentDate, java.time.LocalTime incidentTime) {}
+
+        @PostMapping("/detect-duplicates")
+        @Operation(summary = "Check for potentially duplicate complaints near a location and time")
+        public ResponseEntity<ApiResponseDto<List<ComplaintResponseDto>>> detectDuplicates(@RequestBody DuplicateCheckDto dto) {
+                java.time.LocalDateTime observed = null;
+                if (dto.incidentDate() != null) {
+                        observed = dto.incidentDate().atStartOfDay();
+                        if (dto.incidentTime() != null) observed = dto.incidentDate().atTime(dto.incidentTime());
+                } else {
+                        observed = java.time.LocalDateTime.now();
+                }
+
+                List<ComplaintResponseDto> results = complaintService.detectDuplicates(dto.category(), dto.latitude(), dto.longitude(), observed);
+                return ResponseEntity.ok(ApiResponseDto.success(results));
+        }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")

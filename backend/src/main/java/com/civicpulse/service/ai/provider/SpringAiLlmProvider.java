@@ -3,6 +3,7 @@ package com.civicpulse.service.ai.provider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@ConditionalOnExpression("T(org.springframework.util.StringUtils).hasText('${OPENAI_API_KEY:}')")
 @RequiredArgsConstructor
 public class SpringAiLlmProvider implements LlmProvider {
 

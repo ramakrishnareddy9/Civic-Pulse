@@ -234,6 +234,26 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponseDto.success(wardRepository.findAll()));
     }
 
+    @GetMapping("/officers/leaderboard")
+    @Operation(summary = "Get officers leaderboard with workload metrics")
+    public ResponseEntity<ApiResponseDto<List<java.util.Map<String, Object>>>> getOfficerLeaderboard() {
+        List<Object[]> rows = officerRepository.findLeaderboard();
+        List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        for (Object[] r : rows) {
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("officerId", r[0]);
+            map.put("fullName", r[1]);
+            map.put("departmentName", r[2]);
+            map.put("wardName", r[3]);
+            map.put("totalResolved", r[4]);
+            map.put("totalAssigned", r[5]);
+            map.put("resolutionRate", r[6]);
+            map.put("avgResolutionHours", r[7]);
+            result.add(map);
+        }
+        return ResponseEntity.ok(ApiResponseDto.success(result));
+    }
+
     private UserResponseDto toUserResponse(User user) {
         return new UserResponseDto(
                 user.getId(),

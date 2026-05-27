@@ -50,6 +50,65 @@ public class DepartmentAdminServiceImpl implements DepartmentAdminService {
     }
 
     @Override
+    public Department findBestMatch(String aiDepartment) {
+        if (aiDepartment == null || aiDepartment.isBlank()) {
+            return departmentRepository.findByIsActiveTrue().stream().findFirst().orElse(null);
+        }
+        // 1) Exact case-insensitive match
+        var exact = departmentRepository.findAll().stream()
+                .filter(Department::getIsActive)
+                .filter(d -> d.getName().equalsIgnoreCase(aiDepartment.trim()))
+                .findFirst();
+        if (exact.isPresent()) return exact.get();
+
+        // 2) ILIKE-like contains match
+        var contains = departmentRepository.findAll().stream()
+                .filter(Department::getIsActive)
+                .filter(d -> d.getName().toLowerCase().contains(aiDepartment.toLowerCase().trim()))
+                .findFirst();
+        if (contains.isPresent()) return contains.get();
+
+        // 3) Simple Jaro-Winkler similarity scoring
+        Department best = null;
+        double bestScore = 0.0;
+        for (Department d : departmentRepository.findAll()) {
+            if (!d.getIsActive()) continue;
+            double s = jaroWinkler(aiDepartment.toLowerCase(), d.getName().toLowerCase());
+            if (s > bestScore) { bestScore = s; best = d; }
+        }
+        if (best != null && bestScore > 0.75) return best;
+
+        // Fallback to first active department
+        return departmentRepository.findByIsActiveTrue().stream().findFirst().orElse(null);
+    }
+
+    // Jaro-Winkler similarity (lightweight implementation)
+    private double jaroWinkler(String s1, String s2) {
+        if (s1 == null || s2 == null) return 0.0;
+        if (s1.equals(s2)) return 1.0;
+        int[] mt = new int[2];
+        int m = 0;
+        int range = Math.max(s1.length(), s2.length())/2 - 1;
+        boolean[] s1Matches = new boolean[s1.length()];
+        boolean[] s2Matches = new boolean[s2.length()];
+        for (int i=0;i<s1.length();i++){
+            int start = Math.max(0, i-range);
+            int end = Math.min(s2.length()-1, i+range);
+            for (int j=start;j<=end;j++) if (!s2Matches[j] && s1.charAt(i)==s2.charAt(j)) { s1Matches[i]=s2Matches[j]=true; m++; break; }
+        }
+        if (m==0) return 0.0;
+        double t=0;
+        int k=0;
+        for (int i=0;i<s1.length();i++) if (s1Matches[i]) {
+            while(!s2Matches[k]) k++; if (s1.charAt(i)!=s2.charAt(k)) t++; k++; }
+        t/=2.0;
+        double j = ((double)m / s1.length() + (double)m / s2.length() + (m - t) / m) / 3.0;
+        // Winkler boost
+        int prefix=0; for (int i=0;i<Math.min(4, Math.min(s1.length(), s2.length())); i++) if (s1.charAt(i)==s2.charAt(i)) prefix++; else break;
+        return j + 0.1 * prefix * (1.0 - j);
+    }
+
+    @Override
     public void deleteDepartment(Long id) {
         departmentRepository.deleteById(id);
         log.info("Department deleted: {}", id);

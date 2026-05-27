@@ -3,6 +3,7 @@ package com.civicpulse.repository;
 import com.civicpulse.model.entity.Officer;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -13,6 +14,10 @@ public interface OfficerRepository extends JpaRepository<Officer, Long> {
     Optional<Officer> findByUserId(Long userId);
     List<Officer> findByDepartmentIdAndIsActiveTrue(Long departmentId);
     List<Officer> findByWardIdAndIsActiveTrue(Long wardId);
+
+    // Count active open/in-progress complaints for workload balancing
+    @Query("SELECT COUNT(c) FROM Complaint c WHERE c.officer.id = :officerId AND c.isDeleted = false AND c.status IN :activeStatuses")
+    long countActiveAssignments(@Param("officerId") Long officerId, @Param("activeStatuses") java.util.List<com.civicpulse.model.enums.ComplaintStatus> activeStatuses);
 
     // Leaderboard query
     @Query(value = """

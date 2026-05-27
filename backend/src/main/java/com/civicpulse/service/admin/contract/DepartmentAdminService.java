@@ -40,4 +40,11 @@ public interface DepartmentAdminService {
      * @param id Department ID
      */
     void deleteDepartment(Long id);
+
+    /**
+     * Find the best matching department for a free-text AI suggestion.
+     * @param aiDepartment suggested department name
+     * @return matched Department or null
+     */
+    Department findBestMatch(String aiDepartment);
 }

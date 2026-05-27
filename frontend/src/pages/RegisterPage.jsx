@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@hooks/useAuth'
 import { useNotification } from '@hooks/useNotification'
+import { post } from '@api/client'
 import { ROUTES, VALIDATION, ERRORS } from '@utils/constants'
 
 const PASSWORD_REQUIREMENTS = [
@@ -29,6 +30,8 @@ export function RegisterPage() {
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState(null) // triggers verify-email screen
+  const [resending, setResending] = useState(false)
 
   const passChecks = formData.password
     ? PASSWORD_REQUIREMENTS.map(r => ({ ...r, passed: r.test(formData.password) }))
@@ -67,8 +70,8 @@ export function RegisterPage() {
         password: formData.password,
       })
       if (success) {
-        showSuccess('Account created. Check your email to verify your address before logging in.')
-        navigate(ROUTES.LOGIN)
+        // Show verify-email screen instead of redirecting
+        setRegisteredEmail(formData.email)
       } else {
         showError(authError || 'Registration failed. Please try again.')
       }
@@ -76,6 +79,19 @@ export function RegisterPage() {
       showError(err?.message || 'Registration failed. Please try again.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (!registeredEmail || resending) return
+    setResending(true)
+    try {
+      await post('/api/auth/resend-verification', { email: registeredEmail })
+      showSuccess('Verification email resent! Please check your inbox.')
+    } catch (err) {
+      showError('Failed to resend verification email. Please try again.')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -121,6 +137,63 @@ export function RegisterPage() {
       )}
     </div>
   )
+
+  // ── Email verification gate — shown after successful registration ──────────
+  if (registeredEmail) {
+    return (
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center px-4" style={{ background: 'var(--gov-surface)' }}>
+        <div className="w-full max-w-md text-center animate-fade-in">
+          <div className="bg-white rounded-2xl border p-10 shadow-lg" style={{ borderColor: 'var(--gov-border)' }}>
+            {/* Icon */}
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(16,185,129,0.1)' }}>
+              <span className="material-symbols-outlined text-4xl" style={{ color: '#10b981', fontVariationSettings: "'FILL' 1" }}>mark_email_unread</span>
+            </div>
+            <h1 className="text-2xl font-black mb-2" style={{ color: 'var(--gov-navy)' }}>Check Your Inbox</h1>
+            <p className="text-sm mb-1" style={{ color: 'var(--gov-text-muted)' }}>
+              We sent a verification link to:
+            </p>
+            <p className="font-bold text-base mb-6" style={{ color: 'var(--gov-navy)' }}>{registeredEmail}</p>
+            <p className="text-sm mb-8" style={{ color: 'var(--gov-text-muted)' }}>
+              Click the link in the email to activate your account. You must verify your email before you can log in.
+              The link expires in <strong>24 hours</strong>.
+            </p>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleResend}
+                disabled={resending}
+                className="w-full py-3 rounded-xl font-bold text-sm border transition-all hover:shadow-sm"
+                style={{ borderColor: 'var(--gov-navy)', color: 'var(--gov-navy)', background: 'white' }}
+              >
+                {resending
+                  ? <span className="flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm animate-spin">refresh</span> Resending…</span>
+                  : <span className="flex items-center justify-center gap-2"><span className="material-symbols-outlined text-sm">send</span> Resend Verification Email</span>
+                }
+              </button>
+              <Link
+                to={ROUTES.LOGIN}
+                className="w-full py-3 rounded-xl font-bold text-sm text-center transition-all"
+                style={{ background: 'var(--gov-navy)', color: 'white', textDecoration: 'none' }}
+              >
+                Go to Login
+              </Link>
+            </div>
+
+            {/* Tips */}
+            <div className="mt-8 p-4 rounded-xl text-left text-xs" style={{ background: '#f8fafc', color: 'var(--gov-text-muted)' }}>
+              <p className="font-semibold mb-1">Didn't receive the email?</p>
+              <ul className="space-y-0.5">
+                <li>• Check your spam / junk folder</li>
+                <li>• Make sure you entered the correct email</li>
+                <li>• Wait a few minutes before resending</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[calc(100vh-56px)] flex" style={{ background: 'var(--gov-surface)' }}>

@@ -143,10 +143,36 @@ export const getComplaintAnalytics = async (filters = {}) => {
 }
 
 /**
+ * Detect potential duplicate complaints near a given location and time
+ * @param {Object} payload - { category, latitude, longitude, incidentDate, incidentTime }
+ */
+export const detectDuplicates = async (payload) => {
+  return post('/api/complaints/detect-duplicates', payload)
+}
+
+/**
  * Get SLA information for complaint
  * @param {number} complaintId - Complaint ID
  * @returns {Promise<Object>}
  */
 export const getComplaintSla = async (complaintId) => {
   return get(`/api/complaints/${complaintId}/sla`)
+}
+
+/**
+ * Citizen confirms resolution of a complaint with optional satisfaction rating (1-5).
+ * @param {number} complaintId
+ * @param {number|null} rating - Optional 1-5 satisfaction rating
+ */
+export const confirmComplaint = async (complaintId, rating = null) => {
+  return post(`/api/complaints/${complaintId}/confirm`, rating ? { rating } : {})
+}
+
+/**
+ * Citizen disputes a resolution and reopens the complaint with a reason.
+ * @param {number} complaintId
+ * @param {string} reason
+ */
+export const disputeComplaint = async (complaintId, reason) => {
+  return post(`/api/complaints/${complaintId}/dispute`, { reason })
 }

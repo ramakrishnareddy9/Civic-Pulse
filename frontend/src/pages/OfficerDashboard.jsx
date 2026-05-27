@@ -297,11 +297,11 @@ export function OfficerDashboard() {
         ))}
       </div>
 
-      {/* Main Split-Screen Panel Container */}
-      <div className="flex flex-1 overflow-hidden" style={{ height: 'calc(100vh - 56px - 80px - 40px)' }}>
+      {/* Main Panel Container - responsive for mobile */}
+      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row" style={{ height: 'calc(100vh - 56px - 80px - 40px)' }}>
         
         {/* LEFT COLUMN: Queue & Controls */}
-        <div className="w-full lg:w-1/2 flex flex-col border-r" style={{ borderColor: 'var(--gov-border)', background: 'white', position: 'relative', zIndex: 10 }}>
+        <div className="w-full lg:w-1/2 flex flex-col border-b lg:border-b-0 lg:border-r" style={{ borderColor: 'var(--gov-border)', background: 'white', position: 'relative', zIndex: 10 }}>
           
           {/* Header Controls, Search & Filter Toggles */}
           <div className="p-3 border-b flex flex-col gap-3 sticky top-0 shadow-sm" style={{ background: 'white', borderColor: 'var(--gov-border)', zIndex: 20 }}>

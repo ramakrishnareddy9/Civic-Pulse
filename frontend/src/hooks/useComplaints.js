@@ -257,5 +257,25 @@ export const useComplaints = () => {
     fetchOfficerQueue,
     clearError,
     resetFilters,
+    confirmResolution: async (complaintId, rating = null) => {
+      try {
+        setLoading(true); clearError();
+        const updated = await complaintService.confirmComplaint(complaintId, rating)
+        if (currentComplaint?.id === complaintId) setCurrentComplaint(updated)
+        return true
+      } catch (err) {
+        const apiError = handleApiError(err); setError(apiError.message); return false
+      } finally { setLoading(false) }
+    },
+    disputeResolution: async (complaintId, reason) => {
+      try {
+        setLoading(true); clearError();
+        const updated = await complaintService.disputeComplaint(complaintId, reason)
+        if (currentComplaint?.id === complaintId) setCurrentComplaint(updated)
+        return true
+      } catch (err) {
+        const apiError = handleApiError(err); setError(apiError.message); return false
+      } finally { setLoading(false) }
+    }
   }
 }

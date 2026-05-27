@@ -84,6 +84,21 @@ public class Complaint {
     @Column(name = "resolved_at")
     private LocalDateTime resolvedAt;
 
+    @Column(name = "citizen_approved")
+    @Builder.Default
+    private Boolean citizenApproved = false;
+
+    @Column(name = "sla_warn_2h_sent")
+    @Builder.Default
+    private Boolean slaWarn2hSent = false;
+
+    @Column(name = "sla_warn_30m_sent")
+    @Builder.Default
+    private Boolean slaWarn30mSent = false;
+
+    @Column(name = "satisfaction_rating")
+    private Integer satisfactionRating;
+
     @Column(name = "officer_notes", columnDefinition = "TEXT")
     private String officerNotes;
 

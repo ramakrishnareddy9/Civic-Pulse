@@ -17,6 +17,7 @@ import { AdminDashboard } from '@pages/AdminDashboard'
 import AdminDepartments from '@pages/AdminDepartments'
 import AdminOfficers from '@pages/AdminOfficers'
 import AdminWards from '@pages/AdminWards'
+import AdminLeaderboard from '@pages/admin/AdminLeaderboard'
 import { LandingPage } from '@pages/LandingPage'
 import { NotificationCenter } from '@pages/NotificationCenter'
 import './App.css'
@@ -133,7 +134,7 @@ function App() {
             path={ROUTES.LOGIN}
             element={
               <PublicRoute>
-                <LoginPage />
+                <ErrorBoundary><LoginPage /></ErrorBoundary>
               </PublicRoute>
             }
           />
@@ -141,17 +142,17 @@ function App() {
             path={ROUTES.REGISTER}
             element={
               <PublicRoute>
-                <RegisterPage />
+                <ErrorBoundary><RegisterPage /></ErrorBoundary>
               </PublicRoute>
             }
           />
           <Route
             path={ROUTES.RESET_PASSWORD}
-            element={<ResetPasswordPage />}
+            element={<ErrorBoundary><ResetPasswordPage /></ErrorBoundary>}
           />
 
           {/* Home Route */}
-          <Route path={ROUTES.HOME} element={<LandingPage />} />
+          <Route path={ROUTES.HOME} element={<ErrorBoundary><LandingPage /></ErrorBoundary>} />
 
           {/* Dashboard Route (role-based) */}
           <Route
@@ -168,7 +169,7 @@ function App() {
             path={ROUTES.CITIZEN.DASHBOARD}
             element={
               <ProtectedRoute requiredRoles="CITIZEN">
-                <CitizenDashboard />
+                <ErrorBoundary><CitizenDashboard /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -176,7 +177,7 @@ function App() {
             path={ROUTES.CITIZEN.SUBMIT_COMPLAINT}
             element={
               <ProtectedRoute requiredRoles="CITIZEN">
-                <ComplaintForm />
+                <ErrorBoundary><ComplaintForm /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -184,7 +185,7 @@ function App() {
             path="/citizen/complaints/:id"
             element={
               <ProtectedRoute requiredRoles="CITIZEN">
-                <ComplaintDetail />
+                <ErrorBoundary><ComplaintDetail /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -194,7 +195,7 @@ function App() {
             path={ROUTES.OFFICER.DASHBOARD}
             element={
               <ProtectedRoute requiredRoles="OFFICER">
-                <OfficerDashboard />
+                <ErrorBoundary><OfficerDashboard /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -202,7 +203,7 @@ function App() {
             path="/officer/complaints/:id"
             element={
               <ProtectedRoute requiredRoles="OFFICER">
-                <ComplaintDetail />
+                <ErrorBoundary><ComplaintDetail /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -212,7 +213,7 @@ function App() {
             path="/notifications"
             element={
               <ProtectedRoute>
-                <NotificationCenter />
+                <ErrorBoundary><NotificationCenter /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -222,7 +223,7 @@ function App() {
             path={ROUTES.ADMIN.DASHBOARD}
             element={
               <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
-                <AdminDashboard />
+                <ErrorBoundary><AdminDashboard /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -230,7 +231,7 @@ function App() {
             path="/admin/departments"
             element={
               <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
-                <AdminDepartments />
+                <ErrorBoundary><AdminDepartments /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -238,7 +239,15 @@ function App() {
             path="/admin/officers"
             element={
               <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
-                <AdminOfficers />
+                <ErrorBoundary><AdminOfficers /></ErrorBoundary>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/leaderboard"
+            element={
+              <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
+                <ErrorBoundary><AdminLeaderboard /></ErrorBoundary>
               </ProtectedRoute>
             }
           />
@@ -246,7 +255,7 @@ function App() {
             path="/admin/wards"
             element={
               <ProtectedRoute requiredRoles={['ADMIN', 'DEPT_HEAD']}>
-                <AdminWards />
+                <ErrorBoundary><AdminWards /></ErrorBoundary>
               </ProtectedRoute>
             }
           />

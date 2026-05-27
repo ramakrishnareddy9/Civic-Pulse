@@ -31,6 +31,11 @@ export const useAuthStore = create(
        */
       logout: () => {
         set({ user: null, token: null, refreshToken: null, isAuthenticated: false, error: null }, false, 'logout')
+        try {
+          // Clear AI session for anonymous flows when user logs out
+          localStorage.removeItem('ai.userId')
+          localStorage.removeItem('ai.sessionId')
+        } catch (e) {}
       },
 
       /**

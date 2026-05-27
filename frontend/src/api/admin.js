@@ -199,3 +199,10 @@ export const exportComplaintsReport = async (filters = {}) => {
     responseType: 'blob',
   })
 }
+
+/**
+ * Fetch officer leaderboard with workload/resolution metrics
+ */
+export const fetchOfficerLeaderboard = async () => {
+  return get('/api/admin/officers/leaderboard')
+}

@@ -14,6 +14,8 @@ import com.civicpulse.service.ai.VectorStoreService;
 import com.civicpulse.service.complaint.enrichment.ComplaintEnrichmentPipeline;
 import com.civicpulse.service.complaint.enrichment.EnrichmentException;
 import com.civicpulse.service.mail.MailService;
+import com.civicpulse.service.notification.NotificationService;
+import com.civicpulse.model.enums.NotificationType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -45,12 +47,14 @@ public class ComplaintServiceImpl implements ComplaintService {
     private final ComplaintRepository complaintRepository;
     private final UserRepository userRepository;
     private final WardRepository wardRepository;
+    private final com.civicpulse.service.geo.WardService wardService;
     private final OfficerRepository officerRepository;
     private final ComplaintEnrichmentPipeline enrichmentPipeline;
     private final VectorStoreService vectorStoreService;
     private final FileStorageService fileStorageService;
     private final SimpMessagingTemplate messagingTemplate;
     private final MailService mailService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -76,7 +80,7 @@ public class ComplaintServiceImpl implements ComplaintService {
         }
         
         if (ward == null && dto.latitude() != null && dto.longitude() != null) {
-            ward = findClosestWard(dto.latitude().doubleValue(), dto.longitude().doubleValue());
+            ward = wardService.detectWard(dto.latitude(), dto.longitude());
         }
 
         ComplaintCategory submittedCategory = mapSubmittedCategory(dto.category());
@@ -111,6 +115,69 @@ public class ComplaintServiceImpl implements ComplaintService {
             }
             log.warn("Enrichment partially failed (non-blocking): {}", ex.getMessage());
             // Continue with partially enriched complaint
+        }
+
+        // 5. Auto-assignment: hybrid strategy — prefer ward officers (by load), otherwise proximity-weighted among dept officers
+        try {
+            if (complaint.getDepartment() != null) {
+                Long deptId = complaint.getDepartment().getId();
+                java.util.List<com.civicpulse.model.enums.ComplaintStatus> activeStatuses = java.util.List.of(com.civicpulse.model.enums.ComplaintStatus.OPEN, com.civicpulse.model.enums.ComplaintStatus.IN_PROGRESS);
+
+                // Prefer officers in same ward first
+                java.util.List<com.civicpulse.model.entity.Officer> candidates = officerRepository.findByDepartmentIdAndIsActiveTrue(deptId);
+                if (complaint.getWard() != null) {
+                    java.util.List<com.civicpulse.model.entity.Officer> wardCandidates = officerRepository.findByWardIdAndIsActiveTrue(complaint.getWard().getId());
+                    // filter to same department
+                    wardCandidates.removeIf(o -> o.getDepartment() == null || !o.getDepartment().getId().equals(deptId));
+                    if (!wardCandidates.isEmpty()) candidates = wardCandidates;
+                }
+
+                if (candidates != null && !candidates.isEmpty()) {
+                    com.civicpulse.model.entity.Officer selected = null;
+                    // If we have ward candidates (preferred), choose by lowest load
+                    final com.civicpulse.model.entity.Complaint finalComplaint = complaint;
+                    boolean usingWard = finalComplaint.getWard() != null && candidates.stream().anyMatch(o -> o.getWard() != null && o.getWard().getId() != null && o.getWard().getId().equals(finalComplaint.getWard().getId()));
+                    if (usingWard) {
+                        long minLoad = Long.MAX_VALUE;
+                        for (com.civicpulse.model.entity.Officer o : candidates) {
+                            long load = officerRepository.countActiveAssignments(o.getId(), activeStatuses);
+                            if (load < minLoad) { minLoad = load; selected = o; }
+                        }
+                    } else {
+                        // Hybrid: compute normalized load and distance, pick minimal combined score
+                        double alpha = 0.6; // weight for load vs distance (tuneable)
+                        // gather loads and distances
+                        java.util.Map<com.civicpulse.model.entity.Officer, Long> loads = new java.util.HashMap<>();
+                        java.util.Map<com.civicpulse.model.entity.Officer, Double> dists = new java.util.HashMap<>();
+                        long maxLoad = 1;
+                        double maxDist = 1.0;
+                        for (com.civicpulse.model.entity.Officer o : candidates) {
+                            long load = officerRepository.countActiveAssignments(o.getId(), activeStatuses);
+                            loads.put(o, load);
+                            if (load > maxLoad) maxLoad = load;
+                            double dist = Double.MAX_VALUE;
+                            if (complaint.getLatitude() != null && complaint.getLongitude() != null && o.getWard() != null && o.getWard().getLatitude() != null && o.getWard().getLongitude() != null) {
+                                dist = calculateDistance(complaint.getLatitude().doubleValue(), complaint.getLongitude().doubleValue(), o.getWard().getLatitude().doubleValue(), o.getWard().getLongitude().doubleValue());
+                            }
+                            dists.put(o, dist);
+                            if (dist != Double.MAX_VALUE && dist > maxDist) maxDist = Math.max(maxDist, dist);
+                        }
+
+                        double bestScore = Double.MAX_VALUE;
+                        for (com.civicpulse.model.entity.Officer o : candidates) {
+                            double normLoad = maxLoad > 0 ? ((double) loads.get(o)) / maxLoad : 0.0;
+                            double dist = dists.get(o);
+                            double normDist = dist == Double.MAX_VALUE ? 1.0 : (dist / maxDist);
+                            double score = alpha * normLoad + (1.0 - alpha) * normDist;
+                            if (score < bestScore) { bestScore = score; selected = o; }
+                        }
+                    }
+                    if (selected == null) selected = candidates.get(0);
+                    complaint.setOfficer(selected);
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Auto-assignment failed: {}", ex.getMessage());
         }
 
         // 5. Handle image uploads
@@ -155,6 +222,28 @@ public class ComplaintServiceImpl implements ComplaintService {
             log.debug("Complaint {} embedded into vector store", complaint.getId());
         } catch (Exception ex) {
             log.warn("Vector store embedding failed for complaint {}: {}", complaint.getId(), ex.getMessage());
+        }
+
+        // 8. Create persistent notifications
+        try {
+            notificationService.create(
+                    complaint.getCitizen().getEmail(),
+                    NotificationType.STATUS_UPDATE,
+                    "Complaint #" + complaint.getId() + " Submitted",
+                    "Your complaint \"" + complaint.getTitle() + "\" has been received and is being reviewed.",
+                    "/citizen/complaints/" + complaint.getId()
+            );
+            if (complaint.getOfficer() != null && complaint.getOfficer().getUser() != null) {
+                notificationService.create(
+                        complaint.getOfficer().getUser().getEmail(),
+                        NotificationType.ASSIGNMENT,
+                        "New Complaint Assigned: #" + complaint.getId(),
+                        "A new complaint \"" + complaint.getTitle() + "\" has been assigned to you.",
+                        "/officer/complaints/" + complaint.getId()
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to create submission notifications for complaint {}: {}", complaint.getId(), ex.getMessage());
         }
 
         log.info("Complaint submission completed (ID: {})", complaint.getId());
@@ -229,6 +318,33 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<ComplaintResponseDto> detectDuplicates(String category, java.math.BigDecimal latitude, java.math.BigDecimal longitude, java.time.LocalDateTime observedAt) {
+        if (category == null || latitude == null || longitude == null || observedAt == null) {
+            return java.util.List.of();
+        }
+
+        com.civicpulse.model.enums.ComplaintCategory catEnum = mapSubmittedCategory(category);
+        java.time.LocalDateTime since = observedAt.minusHours(1);
+        java.util.List<com.civicpulse.model.entity.Complaint> recent = complaintRepository.findRecentOpenByCategory(catEnum, since);
+
+        java.util.List<ComplaintResponseDto> matches = new java.util.ArrayList<>();
+        for (com.civicpulse.model.entity.Complaint c : recent) {
+            if (c.getLatitude() == null || c.getLongitude() == null) continue;
+            // time check: within one hour of observedAt using createdAt as proxy
+            if (c.getCreatedAt() == null) continue;
+            long seconds = java.time.Duration.between(c.getCreatedAt(), observedAt).abs().getSeconds();
+            if (seconds > 3600) continue;
+
+            double distKm = calculateDistance(latitude.doubleValue(), longitude.doubleValue(), c.getLatitude().doubleValue(), c.getLongitude().doubleValue());
+            if (distKm <= 1.0) { // within 1 km
+                matches.add(toDto(c));
+            }
+        }
+        return matches;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<ComplaintResponseDto> getOfficerQueue(String officerEmail, Pageable pageable) {
         User user = userRepository.findByEmail(officerEmail)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + officerEmail));
@@ -244,13 +360,46 @@ public class ComplaintServiceImpl implements ComplaintService {
         Complaint complaint = complaintRepository.findById(id)
                 .filter(c -> !c.getIsDeleted())
                 .orElseThrow(() -> new ComplaintNotFoundException(id));
-
         ComplaintStatus oldStatus = complaint.getStatus();
         ComplaintStatus newStatus = ComplaintStatus.valueOf(status.toUpperCase());
+
+        // Enforce state machine: OPEN -> IN_PROGRESS -> RESOLVED -> CLOSED OR OPEN -> REJECTED
+        boolean valid = switch (oldStatus) {
+            case OPEN -> newStatus == ComplaintStatus.IN_PROGRESS || newStatus == ComplaintStatus.REJECTED;
+            case IN_PROGRESS -> newStatus == ComplaintStatus.RESOLVED || newStatus == ComplaintStatus.REJECTED;
+            case RESOLVED -> newStatus == ComplaintStatus.CLOSED || newStatus == ComplaintStatus.REOPENED;
+            case REOPENED -> newStatus == ComplaintStatus.IN_PROGRESS || newStatus == ComplaintStatus.REJECTED;
+            default -> false;
+        };
+
+        if (!valid) {
+            throw new com.civicpulse.exception.InvalidStateTransitionException(oldStatus, newStatus);
+        }
+
         complaint.setStatus(newStatus);
         if (notes != null) complaint.setOfficerNotes(notes);
         if (newStatus == ComplaintStatus.RESOLVED) {
             complaint.setResolvedAt(LocalDateTime.now());
+            complaint.setCitizenApproved(false);
+            // send citizen notification to confirm resolution
+            try {
+                messagingTemplate.convertAndSendToUser(
+                        complaint.getCitizen().getEmail(),
+                        "/queue/complaint-updates",
+                        "Your complaint #" + id + " has been marked RESOLVED. You have 72 hours to dispute or confirm."
+                );
+                mailService.sendComplaintStatusUpdateEmail(
+                        complaint.getCitizen().getEmail(),
+                        complaint.getCitizen().getFullName(),
+                        complaint.getId(),
+                        complaint.getTitle(),
+                        oldStatus.name(),
+                        newStatus.name(),
+                        notes
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to notify citizen about resolved complaint {}: {}", id, ex.getMessage());
+            }
         }
 
         complaint = complaintRepository.save(complaint);
@@ -281,6 +430,21 @@ public class ComplaintServiceImpl implements ComplaintService {
             log.warn("Failed to schedule status update email: {}", ex.getMessage());
         }
 
+        // Persist notification for citizen about status change
+        try {
+            notificationService.create(
+                    complaint.getCitizen().getEmail(),
+                    NotificationType.STATUS_UPDATE,
+                    "Complaint #" + id + " Status: " + newStatus.name().replace("_", " "),
+                    "Your complaint \"" + complaint.getTitle() + "\" has been updated from "
+                            + oldStatus.name() + " to " + newStatus.name() + "."
+                            + (notes != null && !notes.isBlank() ? " Note: " + notes : ""),
+                    "/citizen/complaints/" + id
+            );
+        } catch (Exception ex) {
+            log.warn("Failed to create status update notification for complaint {}: {}", id, ex.getMessage());
+        }
+
         return toDto(complaint);
     }
 
@@ -293,6 +457,92 @@ public class ComplaintServiceImpl implements ComplaintService {
                 .orElseThrow(() -> new IllegalArgumentException("Officer not found"));
         complaint.setOfficer(officer);
         return toDto(complaintRepository.save(complaint));
+    }
+
+    @Override
+    @Transactional
+    public ComplaintResponseDto confirmResolution(Long complaintId, Integer rating, String userEmail) {
+        Complaint complaint = complaintRepository.findById(complaintId)
+                .filter(c -> !c.getIsDeleted())
+                .orElseThrow(() -> new ComplaintNotFoundException(complaintId));
+
+        if (!complaint.getCitizen().getEmail().equalsIgnoreCase(userEmail)) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the reporting citizen can confirm resolution");
+        }
+
+        if (complaint.getStatus() != com.civicpulse.model.enums.ComplaintStatus.RESOLVED) {
+            throw new IllegalStateException("Complaint must be RESOLVED to confirm");
+        }
+
+        complaint.setCitizenApproved(true);
+
+        // Persist satisfaction rating if valid
+        if (rating != null && rating >= 1 && rating <= 5) {
+            complaint.setSatisfactionRating(rating);
+        }
+
+        complaint = complaintRepository.save(complaint);
+
+        // Notify officer that citizen confirmed
+        try {
+            if (complaint.getOfficer() != null && complaint.getOfficer().getUser() != null) {
+                messagingTemplate.convertAndSendToUser(
+                        complaint.getOfficer().getUser().getEmail(),
+                        "/queue/complaint-updates",
+                        "Citizen confirmed resolution for complaint #" + complaint.getId()
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to notify officer about citizen confirmation: {}", ex.getMessage());
+        }
+
+        return toDto(complaint);
+    }
+
+    @Override
+    @Transactional
+    public ComplaintResponseDto disputeResolution(Long complaintId, String reason, String userEmail) {
+        Complaint complaint = complaintRepository.findById(complaintId)
+                .filter(c -> !c.getIsDeleted())
+                .orElseThrow(() -> new ComplaintNotFoundException(complaintId));
+
+        if (!complaint.getCitizen().getEmail().equalsIgnoreCase(userEmail)) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the reporting citizen can dispute resolution");
+        }
+
+        if (complaint.getStatus() != com.civicpulse.model.enums.ComplaintStatus.RESOLVED) {
+            throw new IllegalStateException("Complaint must be RESOLVED to dispute");
+        }
+
+        // Reopen the complaint
+        complaint.setStatus(com.civicpulse.model.enums.ComplaintStatus.REOPENED);
+        complaint.setOfficerNotes((complaint.getOfficerNotes() == null ? "" : complaint.getOfficerNotes() + "\n") + "Citizen dispute: " + (reason == null ? "No reason provided" : reason));
+        complaint.setCitizenApproved(false);
+        complaint = complaintRepository.save(complaint);
+
+        // Notify officer
+        try {
+            if (complaint.getOfficer() != null && complaint.getOfficer().getUser() != null) {
+                messagingTemplate.convertAndSendToUser(
+                        complaint.getOfficer().getUser().getEmail(),
+                        "/queue/complaint-updates",
+                        "Citizen disputed resolution for complaint #" + complaint.getId() + ": " + (reason == null ? "No reason" : reason)
+                );
+                mailService.sendComplaintStatusUpdateEmail(
+                        complaint.getOfficer().getUser().getEmail(),
+                        complaint.getOfficer().getUser().getFullName(),
+                        complaint.getId(),
+                        complaint.getTitle(),
+                        "RESOLVED",
+                        "REOPENED",
+                        "Citizen disputed resolution: " + (reason == null ? "No reason" : reason)
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to notify officer about dispute: {}", ex.getMessage());
+        }
+
+        return toDto(complaint);
     }
 
     @Override
@@ -324,7 +574,8 @@ public class ComplaintServiceImpl implements ComplaintService {
                 c.getSlaDeadline(), c.getResolvedAt(), c.getOfficerNotes(),
                 c.getAiCategory(), c.getAiPriority(), c.getAiReason(),
                 c.getSentimentScore(), imageUrls,
-                c.getCreatedAt(), c.getUpdatedAt()
+                c.getCreatedAt(), c.getUpdatedAt(),
+                c.getSatisfactionRating(), c.getCitizenApproved()
         );
     }
 

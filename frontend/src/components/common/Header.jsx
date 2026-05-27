@@ -1,17 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@hooks/useAuth'
-import { useUiStore } from '@store/uiStore'
+import { useNotifications } from '@hooks/useNotifications'
 import { ROUTES } from '@utils/constants'
 
 export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated, user, logout } = useAuth()
-  const { notifications } = useUiStore()
+  const { unreadCount } = useNotifications()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [devMockActive, setDevMockActive] = useState(false)
   const profileRef = useRef(null)
+
+  // Listen for dev mock usage flag from the API client
+  useEffect(() => {
+    const checkFlag = () => {
+      try {
+        if (import.meta.env.DEV && window.__DEV_MOCK_USED__) setDevMockActive(true)
+      } catch (e) {}
+    }
+    checkFlag()
+    const handler = () => setDevMockActive(true)
+    window.addEventListener('dev-mock-used', handler)
+    return () => window.removeEventListener('dev-mock-used', handler)
+  }, [])
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -36,7 +50,7 @@ export default function Header() {
     navigate(ROUTES.LOGIN)
   }
 
-  const unreadCount = notifications ? notifications.filter(n => !n.read).length : 0
+  // unreadCount is now sourced from useNotifications (real backend)
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/'

@@ -47,4 +47,14 @@ public interface ComplaintRetrievalService {
      * @return Page of assigned complaints
      */
     Page<ComplaintResponseDto> getOfficerQueue(String officerEmail, Pageable pageable);
+
+    /**
+     * Detect potentially duplicate complaints near a given location and time.
+     * @param category Raw category string
+     * @param latitude Latitude
+     * @param longitude Longitude
+     * @param observedAt Observed timestamp
+     * @return List of matching complaints
+     */
+    java.util.List<ComplaintResponseDto> detectDuplicates(String category, java.math.BigDecimal latitude, java.math.BigDecimal longitude, java.time.LocalDateTime observedAt);
 }

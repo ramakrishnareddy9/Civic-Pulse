@@ -22,27 +22,32 @@ public class VectorStoreService {
      */
     public void embedComplaint(Complaint complaint) {
         try {
-            String content = """
+                // Avoid embedding PII (address, names). Only include non-sensitive fields and ward id.
+                String content = """
                     Complaint ID: %d
                     Title: %s
                     Description: %s
                     Category: %s
                     Status: %s
-                    Ward: %s
                     """.formatted(
                     complaint.getId(),
                     complaint.getTitle(),
                     complaint.getDescription(),
                     complaint.getCategory(),
-                    complaint.getStatus(),
-                    complaint.getWard() != null ? complaint.getWard().getName() : "Unknown"
-            );
+                    complaint.getStatus()
+                );
 
-            Document doc = new Document(content, Map.of(
-                    "complaintId", complaint.getId().toString(),
-                    "category", complaint.getCategory() != null ? complaint.getCategory().name() : "OTHER",
-                    "status", complaint.getStatus().name()
-            ));
+                Map<String, Object> metadata = new java.util.HashMap<>();
+                metadata.put("complaintId", String.valueOf(complaint.getId()));
+                metadata.put("category", complaint.getCategory() != null ? complaint.getCategory().name() : "OTHER");
+                metadata.put("status", complaint.getStatus() != null ? complaint.getStatus().name() : "OPEN");
+                if (complaint.getWard() != null && complaint.getWard().getId() != null) {
+                metadata.put("wardId", String.valueOf(complaint.getWard().getId()));
+                }
+                // Mark public/resolved complaints as searchable
+                metadata.put("public", complaint.getStatus() != null && complaint.getStatus().name().equalsIgnoreCase("RESOLVED") ? "true" : "false");
+
+                Document doc = new Document(content, metadata);
 
             vectorStore.add(List.of(doc));
             log.debug("Embedded complaint {} into vector store", complaint.getId());

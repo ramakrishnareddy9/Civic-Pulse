@@ -39,5 +39,7 @@ public record ComplaintResponseDto(
         BigDecimal sentimentScore,
         List<String> imageUrls,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Integer satisfactionRating,
+        Boolean citizenApproved
 ) {}
