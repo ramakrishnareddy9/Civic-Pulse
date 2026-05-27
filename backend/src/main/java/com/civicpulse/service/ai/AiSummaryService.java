@@ -3,9 +3,9 @@ package com.civicpulse.service.ai;
 import com.civicpulse.model.entity.Complaint;
 import com.civicpulse.model.enums.ComplaintStatus;
 import com.civicpulse.repository.ComplaintRepository;
+import com.civicpulse.service.ai.provider.LlmProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiSummaryService {
 
-    private final ChatClient chatClient;
+        private final LlmProvider llmProvider;
     private final ComplaintRepository complaintRepository;
 
     @Transactional(readOnly = true)
@@ -35,24 +35,24 @@ public class AiSummaryService {
                 .collect(Collectors.joining("\n"));
 
         try {
-            return chatClient.prompt()
-                    .user(u -> u.text("""
-                            You are an analyst for a municipal government officer.
-                            Summarize these citizen complaints for Ward ID {wardId}.
-                            Group by category. Highlight urgent issues. Suggest 3-5 action items.
-                            Be concise and structured.
-                            
-                            Complaints:
-                            {complaints}
-                            """)
-                            .param("wardId", wardId.toString())
-                            .param("complaints", complaintsText))
-                    .call()
-                    .content();
+            String response = llmProvider.invokeText("""
+                    You are an analyst for a municipal government officer.
+                    Summarize these citizen complaints for Ward ID %s.
+                    Group by category. Highlight urgent issues. Suggest 3-5 action items.
+                    Be concise and structured.
+                    """.formatted(wardId), """
+                    Complaints:
+                    %s
+                    """.formatted(complaintsText));
+
+            if (response != null && !response.isBlank() && !response.startsWith("[AI UNAVAILABLE]")) {
+                return response;
+            }
         } catch (Exception ex) {
             log.error("Ward summary generation failed for ward {}: {}", wardId, ex.getMessage(), ex);
-            return "AI summary temporarily unavailable. Please review the " + complaints.size() +
-                   " open complaints manually.";
         }
+
+        return "AI summary temporarily unavailable. Please review the " + complaints.size() +
+                " open complaints manually.";
     }
 }

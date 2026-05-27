@@ -703,9 +703,6 @@ export function ComplaintDetail() {
           </div>
         </div>
       )}
-    </div>
-  )
-}
 
       {/* Dispute Modal */}
       {showDisputeModal && (
@@ -752,3 +749,6 @@ export function ComplaintDetail() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
