@@ -105,7 +105,7 @@ export const reassignOfficer = async (officerId, wardId, deptId) => {
  * @returns {Promise<void>}
  */
 export const deactivateOfficer = async (officerId) => {
-  return del(`/api/admin/officers/${officerId}`)
+  return del(`/api/admin/officers/${officerId}/deactivate`)
 }
 
 /**
@@ -165,7 +165,7 @@ export const getDashboardSummary = async () => {
  * @returns {Promise<Object>}
  */
 export const getComplaintsByStatus = async () => {
-  return get('/api/admin/analytics/complaints-by-status')
+  return get('/api/analytics/complaints-by-status')
 }
 
 /**
@@ -173,7 +173,7 @@ export const getComplaintsByStatus = async () => {
  * @returns {Promise<Object>}
  */
 export const getSlaReport = async () => {
-  return get('/api/admin/analytics/sla-compliance')
+  return get('/api/analytics/sla-compliance')
 }
 
 /**
@@ -183,8 +183,8 @@ export const getSlaReport = async () => {
  */
 export const getPerformanceMetrics = async (departmentId) => {
   const url = departmentId
-    ? `/api/admin/analytics/performance?departmentId=${departmentId}`
-    : '/api/admin/analytics/performance'
+    ? `/api/analytics/performance?departmentId=${departmentId}`
+    : '/api/analytics/performance'
   return get(url)
 }
 
@@ -195,9 +195,7 @@ export const getPerformanceMetrics = async (departmentId) => {
  */
 export const exportComplaintsReport = async (filters = {}) => {
   const params = new URLSearchParams(filters)
-  return get(`/api/admin/reports/complaints?${params.toString()}`, {
-    responseType: 'blob',
-  })
+  return get(`/api/analytics/complaints?${params.toString()}`)
 }
 
 /**

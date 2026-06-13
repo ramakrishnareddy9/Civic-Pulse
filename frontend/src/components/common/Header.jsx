@@ -102,6 +102,13 @@ export default function Header() {
         { to: '/admin/wards', label: 'Wards' },
       ]
     }
+    if (user?.role === 'DEPT_HEAD') {
+      return [
+        { to: ROUTES.ADMIN.DASHBOARD, label: 'Dashboard' },
+        { to: '/admin/officers', label: 'Officers' },
+        { to: '/admin/leaderboard', label: 'Leaderboard' },
+      ]
+    }
     return []
   }
 
@@ -112,6 +119,7 @@ export default function Header() {
     CITIZEN: { label: 'Citizen', color: '#22c55e' },
     OFFICER: { label: 'Officer', color: '#f59e0b' },
     ADMIN: { label: 'Administrator', color: '#ef4444' },
+    DEPT_HEAD: { label: 'Dept. Head', color: '#a855f7' },
   }
 
   return (
@@ -257,6 +265,16 @@ export default function Header() {
                       >
                         <span className="material-symbols-outlined text-base" style={{ color: 'var(--gov-navy)' }}>analytics</span>
                         Admin Console
+                      </Link>
+                    )}
+                    {user?.role === 'DEPT_HEAD' && (
+                      <Link
+                        to={ROUTES.ADMIN.DASHBOARD}
+                        className="flex items-center gap-3 px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
+                        style={{ color: 'var(--gov-text)' }}
+                      >
+                        <span className="material-symbols-outlined text-base" style={{ color: 'var(--gov-navy)' }}>dashboard</span>
+                        Dept. Dashboard
                       </Link>
                     )}
                     <Link

@@ -23,35 +23,37 @@ export const useAuth = () => {
         setLoading(true)
         setError(null)
 
-        // Frontend-only dummy account login interceptor
-        const lowerEmail = email.toLowerCase()
-        if (
-          lowerEmail === 'admin@civicpulse.gov.in' ||
-          lowerEmail === 'officer@civicpulse.gov.in' ||
-          lowerEmail === 'citizen@civicpulse.gov.in' ||
-          lowerEmail.startsWith('dummy-')
-        ) {
-          let role = 'CITIZEN'
-          let fullName = 'Sarah Jenkins'
-          if (lowerEmail.includes('admin')) {
-            role = 'ADMIN'
-            fullName = 'Chief Administrator'
-          } else if (lowerEmail.includes('officer')) {
-            role = 'OFFICER'
-            fullName = 'Officer James Smith'
-          }
+        // Frontend-only dummy account login interceptor — development only
+        if (import.meta.env.DEV) {
+          const lowerEmail = email.toLowerCase()
+          if (
+            lowerEmail === 'admin@civicpulse.gov.in' ||
+            lowerEmail === 'officer@civicpulse.gov.in' ||
+            lowerEmail === 'citizen@civicpulse.gov.in' ||
+            lowerEmail.startsWith('dummy-')
+          ) {
+            let role = 'CITIZEN'
+            let fullName = 'Sarah Jenkins'
+            if (lowerEmail.includes('admin')) {
+              role = 'ADMIN'
+              fullName = 'Chief Administrator'
+            } else if (lowerEmail.includes('officer')) {
+              role = 'OFFICER'
+              fullName = 'Officer James Smith'
+            }
 
-          const dummyUser = {
-            id: 999,
-            email: lowerEmail,
-            fullName,
-            role,
-            createdAt: new Date().toISOString(),
+            const dummyUser = {
+              id: 999,
+              email: lowerEmail,
+              fullName,
+              role,
+              createdAt: new Date().toISOString(),
+            }
+            const dummyToken = 'dummy-jwt-token-for-local-testing'
+            setAuth(dummyUser, dummyToken, null)
+            localStorage.setItem('token', dummyToken)
+            return true
           }
-          const dummyToken = 'dummy-jwt-token-for-local-testing'
-          setAuth(dummyUser, dummyToken, null)
-          localStorage.setItem('token', dummyToken)
-          return true
         }
 
         const { user: userData, token: authToken, refreshToken: authRefreshToken } = await authService.login(email, password)

@@ -63,6 +63,7 @@ public class AiCategorizationEnricher implements ComplaintEnricher {
                 String safeDescription = sanitize(complaint.getDescription());
                 params.put("title", safeTitle);
                 params.put("description", safeDescription);
+                params.put("ward", complaint.getWard() != null ? complaint.getWard().getName() : "Unknown");
 
                 AiCategorizationResultDto result = null;
                 try {

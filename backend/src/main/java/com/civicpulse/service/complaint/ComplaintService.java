@@ -26,34 +26,12 @@ public interface ComplaintService extends
         ComplaintSubmissionService,
         ComplaintRetrievalService,
         ComplaintStatusService {
-    
-    /**
-     * Submit a new complaint with optional images (legacy convenience method).
-     */
-    ComplaintResponseDto submitComplaint(ComplaintRequestDto dto,
-                                        List<MultipartFile> images,
-                                        String userEmail);
-
-    /**
-     * Get current user's complaints (legacy convenience method).
-     */
-    ComplaintResponseDto getComplaint(Long id);  // Maps to getById()
 
     /**
      * Get a complaint with access checks for the requesting user.
      */
     ComplaintResponseDto getComplaint(Long id, String requesterEmail);
     
-    /**
-     * Get citizen's complaints page (legacy convenience method).
-     */
-    Page<ComplaintResponseDto> getMyComplaints(String userEmail, Pageable pageable);
-
-    /**
-     * Get ward complaints page (legacy convenience method).
-     */
-    Page<ComplaintResponseDto> getWardComplaints(Long wardId, Pageable pageable);
-
     /**
      * Reassign complaint to different officer.
      *

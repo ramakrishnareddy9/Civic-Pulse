@@ -196,8 +196,9 @@ export const useComplaints = () => {
         clearError()
 
         const data = await complaintService.fetchUserComplaints(userEmail, page, limit)
-        setComplaints(data.content || [])
-        setPagination(data)
+        const complaintsArray = Array.isArray(data) ? data : (data?.content || [])
+        setComplaints(complaintsArray)
+        if (!Array.isArray(data)) setPagination(data)
 
         return true
       } catch (err) {
@@ -225,9 +226,9 @@ export const useComplaints = () => {
         clearError()
 
         const data = await complaintService.fetchOfficerQueue(officerEmail, page, limit)
-        const list = data.content || []
+        const list = Array.isArray(data) ? data : (data?.content || [])
         setComplaints(list)
-        setPagination(data)
+        if (!Array.isArray(data)) setPagination(data)
 
         return list
       } catch (err) {

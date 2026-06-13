@@ -75,7 +75,7 @@ export const getCurrentUser = async () => {
  * @returns {Promise<void>}
  */
 export const verifyEmail = async (token) => {
-  return post('/api/auth/verify-email', { token })
+  return get(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)
 }
 
 /**

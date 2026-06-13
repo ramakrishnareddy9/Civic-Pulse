@@ -15,6 +15,7 @@ import com.civicpulse.repository.OfficerRepository;
 import com.civicpulse.repository.WardRepository;
 import com.civicpulse.service.admin.contract.DepartmentAdminService;
 import com.civicpulse.service.admin.contract.OfficerAdminService;
+import com.civicpulse.service.admin.contract.WardAdminService;
 import com.civicpulse.service.complaint.ComplaintService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,6 +44,7 @@ public class AdminController {
 
     private final DepartmentAdminService departmentAdminService;
     private final OfficerAdminService officerAdminService;
+    private final WardAdminService wardAdminService;
     private final ComplaintService complaintService;
     private final UserRepository userRepository;
     private final ComplaintRepository complaintRepository;
@@ -139,12 +141,15 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponseDto.success(officers));
     }
 
+    public record ReassignOfficerDto(Long wardId, Long departmentId) {}
+
     @PutMapping("/officers/{id}/reassign")
     @Operation(summary = "Reassign officer to different ward/department")
     public ResponseEntity<ApiResponseDto<Officer>> reassignOfficer(
             @PathVariable Long id,
-            @RequestParam(required = false) Long wardId,
-            @RequestParam(required = false) Long deptId) {
+            @RequestBody(required = false) ReassignOfficerDto dto) {
+        Long wardId = dto != null ? dto.wardId() : null;
+        Long deptId = dto != null ? dto.departmentId() : null;
         Officer updated = officerAdminService.reassignOfficer(id, wardId, deptId);
         return ResponseEntity.ok(ApiResponseDto.success(updated, "Officer reassigned successfully"));
     }
@@ -231,7 +236,31 @@ public class AdminController {
     @GetMapping("/wards")
     @Operation(summary = "Get all wards")
     public ResponseEntity<ApiResponseDto<List<Ward>>> getWards() {
-        return ResponseEntity.ok(ApiResponseDto.success(wardRepository.findAll()));
+        return ResponseEntity.ok(ApiResponseDto.success(wardAdminService.getAllWards()));
+    }
+
+    @PostMapping("/wards")
+    @Operation(summary = "Create a ward")
+    public ResponseEntity<ApiResponseDto<Ward>> createWard(@Valid @RequestBody Ward ward) {
+        Ward created = wardAdminService.createWard(ward);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponseDto.success(created, "Ward created successfully"));
+    }
+
+    @PutMapping("/wards/{id}")
+    @Operation(summary = "Update a ward")
+    public ResponseEntity<ApiResponseDto<Ward>> updateWard(
+            @PathVariable Long id,
+            @Valid @RequestBody Ward ward) {
+        Ward updated = wardAdminService.updateWard(id, ward);
+        return ResponseEntity.ok(ApiResponseDto.success(updated, "Ward updated successfully"));
+    }
+
+    @DeleteMapping("/wards/{id}")
+    @Operation(summary = "Delete a ward")
+    public ResponseEntity<ApiResponseDto<Void>> deleteWard(@PathVariable Long id) {
+        wardAdminService.deleteWard(id);
+        return ResponseEntity.ok(ApiResponseDto.success(null, "Ward deleted successfully"));
     }
 
     @GetMapping("/officers/leaderboard")

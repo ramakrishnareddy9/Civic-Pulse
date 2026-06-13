@@ -60,7 +60,7 @@ function SLACounter({ slaDueDate, status }) {
 export function ComplaintDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentComplaint, loading, error, fetchDetail, deleteComplaint, updateComplaintStatus, confirmResolution, disputeResolution } = useComplaints()
+  const { currentComplaint, loading, error, fetchDetail, deleteComplaint, updateStatus: updateComplaintStatus, confirmResolution, disputeResolution } = useComplaints()
   const { user } = useAuth()
   const { error: showError, success } = useNotification()
 
@@ -121,7 +121,7 @@ export function ComplaintDetail() {
   }
 
   const complaint = currentComplaint
-  const isOwner = user?.email === complaint.submittedBy
+  const isOwner = user?.id != null && user.id === complaint.citizenId
   const isStaff = user?.role === 'OFFICER' || user?.role === 'ADMIN'
   const statusCfg = STATUS_CONFIG[complaint.status] || STATUS_CONFIG.OPEN
   const priorityCfg = PRIORITY_CONFIG[complaint.priority] || PRIORITY_CONFIG.LOW
@@ -252,7 +252,7 @@ export function ComplaintDetail() {
                     {priorityCfg.label}
                   </span>
                 )}
-                <SLACounter slaDueDate={complaint.slaDueDate} status={complaint.status} />
+                <SLACounter slaDueDate={complaint.slaDeadline} status={complaint.status} />
               </div>
               <h1 className="text-2xl font-black mb-2" style={{ color: 'var(--gov-navy)' }}>{complaint.title}</h1>
               <div className="flex flex-wrap gap-4 text-sm text-gray-500">
@@ -262,10 +262,10 @@ export function ComplaintDetail() {
                     {complaint.category}
                   </span>
                 )}
-                {complaint.ward && (
+                {complaint.wardName && (
                   <span className="flex items-center gap-1">
                     <span className="material-symbols-outlined text-sm">location_on</span>
-                    {complaint.ward}
+                    {complaint.wardName}
                   </span>
                 )}
                 {complaint.createdAt && (
@@ -383,22 +383,22 @@ export function ComplaintDetail() {
             </div>
 
             {/* Images */}
-            {complaint.images && complaint.images.length > 0 && (
+            {complaint.imageUrls && complaint.imageUrls.length > 0 && (
               <div className="bg-white rounded-2xl border p-6" style={{ borderColor: 'var(--gov-border)' }}>
                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-400 mb-3">
-                  Evidence Photos ({complaint.images.length})
+                  Evidence Photos ({complaint.imageUrls.length})
                 </h2>
                 <div className="rounded-xl overflow-hidden mb-3" style={{ maxHeight: '320px' }}>
                   <img
-                    src={complaint.images[activeImage]}
+                    src={complaint.imageUrls[activeImage]}
                     alt={`Evidence ${activeImage + 1}`}
                     className="w-full h-full object-cover"
                     style={{ maxHeight: '320px' }}
                   />
                 </div>
-                {complaint.images.length > 1 && (
+                {complaint.imageUrls.length > 1 && (
                   <div className="flex gap-2 flex-wrap">
-                    {complaint.images.map((img, i) => (
+                    {complaint.imageUrls.map((img, i) => (
                       <button
                         key={i}
                         onClick={() => setActiveImage(i)}
@@ -425,9 +425,9 @@ export function ComplaintDetail() {
                   style={{ background: 'rgba(10,35,66,0.03)', borderLeftColor: 'var(--gov-navy)' }}
                 >
                   <p className="text-sm text-gray-700 leading-relaxed">{complaint.officerNotes}</p>
-                  {complaint.assignedTo && (
+                  {complaint.officerName && (
                     <p className="text-xs font-bold mt-2" style={{ color: 'var(--gov-navy)' }}>
-                      — {complaint.assignedTo}
+                      — {complaint.officerName}
                     </p>
                   )}
                 </div>
@@ -475,11 +475,11 @@ export function ComplaintDetail() {
                 {[
                   { label: 'Case ID', value: `#CP-${complaint.id}`, icon: 'tag' },
                   { label: 'Category', value: complaint.category || '—', icon: 'category' },
-                  { label: 'Ward', value: complaint.ward || '—', icon: 'location_on' },
-                  { label: 'Submitted By', value: complaint.submittedBy || 'Anonymous', icon: 'person' },
-                  { label: 'Assigned To', value: complaint.assignedTo || 'Unassigned', icon: 'badge' },
+                  { label: 'Ward', value: complaint.wardName || '—', icon: 'location_on' },
+                  { label: 'Submitted By', value: complaint.citizenName || 'Anonymous', icon: 'person' },
+                  { label: 'Assigned To', value: complaint.officerName || 'Unassigned', icon: 'badge' },
                   { label: 'Filed On', value: complaint.createdAt ? new Date(complaint.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—', icon: 'calendar_today' },
-                  { label: 'SLA Deadline', value: complaint.slaDueDate ? new Date(complaint.slaDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set', icon: 'schedule' },
+                  { label: 'SLA Deadline', value: complaint.slaDeadline ? new Date(complaint.slaDeadline).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not set', icon: 'schedule' },
                 ].map((item) => (
                   <div key={item.label} className="flex gap-3">
                     <span className="material-symbols-outlined text-sm mt-0.5 shrink-0" style={{ color: 'var(--gov-text-muted)' }}>{item.icon}</span>

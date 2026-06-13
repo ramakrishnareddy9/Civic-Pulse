@@ -4,8 +4,10 @@ import com.civicpulse.model.dto.request.ComplaintRequestDto;
 import com.civicpulse.model.dto.response.ApiResponseDto;
 import com.civicpulse.model.dto.response.ComplaintResponseDto;
 import com.civicpulse.model.entity.AiInsight;
+import com.civicpulse.model.entity.Complaint;
 import com.civicpulse.model.enums.InsightType;
 import com.civicpulse.repository.AiInsightRepository;
+import com.civicpulse.repository.ComplaintRepository;
 import com.civicpulse.repository.SlaRepository;
 import com.civicpulse.service.complaint.ComplaintService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,6 +37,7 @@ public class ComplaintController {
     private final ComplaintService complaintService;
     private final AiInsightRepository aiInsightRepository;
     private final SlaRepository slaRepository;
+    private final ComplaintRepository complaintRepository;
 
     public record StatusUpdateDto(String status, String notes) {}
 
@@ -51,7 +54,7 @@ public class ComplaintController {
             throw new IllegalArgumentException("Missing part 'data' or 'complaint'");
         }
 
-        ComplaintResponseDto response = complaintService.submitComplaint(
+        ComplaintResponseDto response = complaintService.submit(
                 dto, images, userDetails.getUsername());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseDto.success(response, "Complaint submitted successfully"));
@@ -62,6 +65,9 @@ public class ComplaintController {
     public ResponseEntity<ApiResponseDto<ComplaintResponseDto>> getById(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) {
+            throw new IllegalArgumentException("User authentication required");
+        }
         return ResponseEntity.ok(ApiResponseDto.success(
                 complaintService.getComplaint(id, userDetails.getUsername())));
     }
@@ -72,7 +78,7 @@ public class ComplaintController {
             @AuthenticationPrincipal UserDetails userDetails,
             @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
         return ResponseEntity.ok(ApiResponseDto.success(
-                complaintService.getMyComplaints(userDetails.getUsername(), pageable)));
+                complaintService.getByUser(userDetails.getUsername(), pageable)));
     }
 
     @GetMapping("/ward/{wardId}")
@@ -82,7 +88,7 @@ public class ComplaintController {
             @PathVariable Long wardId,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
         return ResponseEntity.ok(ApiResponseDto.success(
-                complaintService.getWardComplaints(wardId, pageable)));
+                complaintService.getByWard(wardId, pageable)));
     }
 
     @GetMapping("/queue")
@@ -208,6 +214,21 @@ public class ComplaintController {
     }
 
         public record DuplicateCheckDto(String category, java.math.BigDecimal latitude, java.math.BigDecimal longitude, java.time.LocalDate incidentDate, java.time.LocalTime incidentTime) {}
+
+        @GetMapping({"", "/"})
+        @PreAuthorize("hasAnyRole('OFFICER','DEPT_HEAD','ADMIN')")
+        @Operation(summary = "List all active complaints with optional ward filter (officer/admin only)")
+        public ResponseEntity<ApiResponseDto<Page<ComplaintResponseDto>>> listAll(
+                @RequestParam(required = false) Long wardId,
+                @PageableDefault(size = 20, sort = "createdAt") Pageable pageable,
+                @AuthenticationPrincipal UserDetails userDetails) {
+            Page<Complaint> page = wardId != null
+                    ? complaintRepository.findAllActiveByWard(wardId, pageable)
+                    : complaintRepository.findAllActive(pageable);
+            Page<ComplaintResponseDto> result = page.map(c ->
+                    complaintService.getComplaint(c.getId(), userDetails.getUsername()));
+            return ResponseEntity.ok(ApiResponseDto.success(result));
+        }
 
         @PostMapping("/detect-duplicates")
         @Operation(summary = "Check for potentially duplicate complaints near a location and time")

@@ -340,4 +340,29 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponseDto.success(null,
                 "If the email exists and is unverified, a new verification link has been sent."));
     }
+
+    public record ChangePasswordRequestDto(
+            @jakarta.validation.constraints.NotBlank String oldPassword,
+            @jakarta.validation.constraints.NotBlank String newPassword
+    ) {}
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Change authenticated user's password")
+    public ResponseEntity<ApiResponseDto<Void>> changePassword(
+            @Valid @RequestBody ChangePasswordRequestDto body,
+            Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponseDto.error("Not authenticated"));
+        }
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (!passwordEncoder.matches(body.oldPassword(), user.getPassword())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponseDto.error("Current password is incorrect"));
+        }
+        user.setPassword(passwordEncoder.encode(body.newPassword()));
+        userRepository.save(user);
+        return ResponseEntity.ok(ApiResponseDto.success(null, "Password changed successfully"));
+    }
 }

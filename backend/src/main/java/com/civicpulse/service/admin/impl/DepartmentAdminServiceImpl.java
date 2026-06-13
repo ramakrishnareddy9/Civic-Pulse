@@ -23,6 +23,7 @@ import java.util.List;
 public class DepartmentAdminServiceImpl implements DepartmentAdminService {
 
     private final DepartmentRepository departmentRepository;
+    private final com.civicpulse.repository.ComplaintRepository complaintRepository;
 
     @Override
     public Department createDepartment(Department department) {
@@ -34,7 +35,7 @@ public class DepartmentAdminServiceImpl implements DepartmentAdminService {
     @Override
     @Transactional(readOnly = true)
     public List<Department> getAllDepartments() {
-        return departmentRepository.findAll();
+        return departmentRepository.findByIsActiveTrue();
     }
 
     @Override
@@ -110,7 +111,13 @@ public class DepartmentAdminServiceImpl implements DepartmentAdminService {
 
     @Override
     public void deleteDepartment(Long id) {
-        departmentRepository.deleteById(id);
-        log.info("Department deleted: {}", id);
+        Department existing = departmentRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Department not found: " + id));
+        
+        // Soft-delete: set is_active to false instead of hard-deleting
+        // This preserves data integrity and audit trail for complaints referencing this department
+        existing.setIsActive(false);
+        departmentRepository.save(existing);
+        log.info("Department soft-deleted (is_active set to false): {}", id);
     }
 }

@@ -30,7 +30,7 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
         List<Complaint> findRecentOpenByCategory(@Param("category") ComplaintCategory category,
                                @Param("since") LocalDateTime since);
 
-    // SLA breach check: status not resolved and deadline passed
+    // SLA breach check: status not resolved/closed/escalated/in-progress and deadline passed
         @Query("SELECT c FROM Complaint c WHERE c.status NOT IN :closedStatuses " +
            "AND c.slaDeadline < :now AND c.isDeleted = false")
         List<Complaint> findSlaBreached(@Param("now") LocalDateTime now,
@@ -90,7 +90,14 @@ public interface ComplaintRepository extends JpaRepository<Complaint, Long> {
 
     long countByCitizenId(Long citizenId);
     long countByStatus(ComplaintStatus status);
+    long countByDepartmentId(Long departmentId);
 
     @Query("SELECT COUNT(c) FROM Complaint c WHERE c.isDeleted = false")
     long countActive();
+
+    @Query("SELECT c FROM Complaint c WHERE c.isDeleted = false")
+    Page<Complaint> findAllActive(Pageable pageable);
+
+    @Query("SELECT c FROM Complaint c WHERE c.isDeleted = false AND c.ward.id = :wardId")
+    Page<Complaint> findAllActiveByWard(@Param("wardId") Long wardId, Pageable pageable);
 }

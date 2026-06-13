@@ -68,7 +68,8 @@ public class ComplaintServiceImpl implements ComplaintService {
         // 2. Get ward if provided, otherwise resolve dynamically from coordinates
         Ward ward = null;
         if (dto.wardId() != null) {
-            ward = wardRepository.findById(dto.wardId()).orElse(null);
+            ward = wardRepository.findById(dto.wardId())
+                    .orElseThrow(() -> new IllegalArgumentException("Ward not found: " + dto.wardId()));
         } else if (dto.ward() != null && !dto.ward().isBlank()) {
             ward = wardRepository.findByCode(dto.ward()).orElse(null);
             if (ward == null) {
@@ -202,6 +203,21 @@ public class ComplaintServiceImpl implements ComplaintService {
             }
         }
 
+        // 6. Broadcast complaint creation to officers via WebSocket
+        try {
+            if (complaint.getPriority() == Priority.CRITICAL || complaint.getPriority() == Priority.HIGH) {
+                java.util.Map<String, Object> notification = new java.util.HashMap<>();
+                notification.put("type", "CREATED");
+                notification.put("complaint", toDto(complaint));
+                notification.put("priority", complaint.getPriority().name());
+                notification.put("timestamp", LocalDateTime.now());
+                messagingTemplate.convertAndSend("/topic/complaints", notification);
+                log.debug("Complaint creation notification sent to /topic/complaints");
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to broadcast complaint creation: {}", ex.getMessage());
+        }
+
         // Trigger complaint submission email notification (Asynchronous)
         try {
             mailService.sendComplaintSubmissionEmail(
@@ -251,24 +267,6 @@ public class ComplaintServiceImpl implements ComplaintService {
     }
 
     @Override
-    @Transactional
-    public ComplaintResponseDto submitComplaint(ComplaintRequestDto dto,
-                                                List<MultipartFile> images,
-                                                String userEmail) {
-        // Legacy method — delegates to new submit() method for backward compatibility
-        return submit(dto, images, userEmail);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public ComplaintResponseDto getComplaint(Long id) {
-        Complaint complaint = complaintRepository.findById(id)
-                .filter(c -> !c.getIsDeleted())
-                .orElseThrow(() -> new ComplaintNotFoundException(id));
-        return toDto(complaint);
-    }
-
-    @Override
     @Transactional(readOnly = true)
     public ComplaintResponseDto getComplaint(Long id, String requesterEmail) {
         Complaint complaint = complaintRepository.findById(id)
@@ -277,13 +275,6 @@ public class ComplaintServiceImpl implements ComplaintService {
 
         ensureCanViewComplaint(complaint, requesterEmail);
         return toDto(complaint);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public ComplaintResponseDto getById(Long id) {
-        // Maps to getComplaint() for compatibility with new interface
-        return getComplaint(id);
     }
 
     @Override
@@ -297,23 +288,9 @@ public class ComplaintServiceImpl implements ComplaintService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ComplaintResponseDto> getMyComplaints(String userEmail, Pageable pageable) {
-        // Maps to getByUser() for backward compatibility
-        return getByUser(userEmail, pageable);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Page<ComplaintResponseDto> getByWard(Long wardId, Pageable pageable) {
         return complaintRepository.findByWardIdAndIsDeletedFalse(wardId, pageable)
                 .map(this::toDto);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Page<ComplaintResponseDto> getWardComplaints(Long wardId, Pageable pageable) {
-        // Maps to getByWard() for backward compatibility
-        return getByWard(wardId, pageable);
     }
 
     @Override

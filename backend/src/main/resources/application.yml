@@ -37,9 +37,19 @@ spring:
       embedding:
         options:
           model: text-embedding-3-small
+    vectorstore:
+      pgvector:
+        # Spring AI PgVector configuration
+        # For development: uses SimpleVectorStore (in-memory) via LocalAiConfig
+        # For production: uses PostgreSQL pgvector when datasource is PostgreSQL
+        initialize-schema: false  # Handled by Flyway migration V7
+        embedding-dimension: 384   # LocalAiConfig uses 384 dimensions
 
   flyway:
-    enabled: false
+    enabled: true
+    baseline-on-migrate: true
+    out-of-order: false
+    locations: classpath:db/migration
 
   servlet:
     multipart:

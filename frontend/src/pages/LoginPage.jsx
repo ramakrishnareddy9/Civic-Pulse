@@ -299,39 +299,41 @@ export function LoginPage() {
             Create New Account
           </Link>
 
-          {/* Demo accounts panel */}
-          <div
-            className="mt-6 rounded-xl border p-4"
-            style={{ background: 'rgba(10,35,66,0.03)', borderColor: 'rgba(10,35,66,0.1)' }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-symbols-outlined text-sm" style={{ color: 'var(--gov-navy)' }}>info</span>
-              <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--gov-navy)' }}>Development Demo Accounts</p>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">Click any account below to autofill credentials (any password works):</p>
-            <div className="space-y-2">
-              {DEMO_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  onClick={() => handleDemoLogin(acc.email)}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all hover:shadow-sm text-left"
-                  style={{ background: 'white', borderColor: 'var(--gov-border)' }}
-                >
-                  <div
-                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: acc.bg }}
+          {/* Demo accounts panel — development only */}
+          {import.meta.env.DEV && (
+            <div
+              className="mt-6 rounded-xl border p-4"
+              style={{ background: 'rgba(10,35,66,0.03)', borderColor: 'rgba(10,35,66,0.1)' }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-sm" style={{ color: 'var(--gov-navy)' }}>info</span>
+                <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--gov-navy)' }}>Development Demo Accounts</p>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">Click any account below to autofill credentials (any password works):</p>
+              <div className="space-y-2">
+                {DEMO_ACCOUNTS.map(acc => (
+                  <button
+                    key={acc.email}
+                    onClick={() => handleDemoLogin(acc.email)}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all hover:shadow-sm text-left"
+                    style={{ background: 'white', borderColor: 'var(--gov-border)' }}
                   >
-                    <span className="material-symbols-outlined text-sm" style={{ color: acc.color, fontVariationSettings: "'FILL' 1" }}>{acc.icon}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold" style={{ color: 'var(--gov-text)' }}>{acc.role}</p>
-                    <p className="text-[10px] truncate" style={{ color: 'var(--gov-text-muted)' }}>{acc.email}</p>
-                  </div>
-                  <span className="material-symbols-outlined text-sm ml-auto" style={{ color: 'var(--gov-text-light)' }}>arrow_forward</span>
-                </button>
-              ))}
+                    <div
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: acc.bg }}
+                    >
+                      <span className="material-symbols-outlined text-sm" style={{ color: acc.color, fontVariationSettings: "'FILL' 1" }}>{acc.icon}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold" style={{ color: 'var(--gov-text)' }}>{acc.role}</p>
+                      <p className="text-[10px] truncate" style={{ color: 'var(--gov-text-muted)' }}>{acc.email}</p>
+                    </div>
+                    <span className="material-symbols-outlined text-sm ml-auto" style={{ color: 'var(--gov-text-light)' }}>arrow_forward</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Legal footer */}
           <p className="text-center text-xs text-gray-400 mt-6 leading-relaxed">

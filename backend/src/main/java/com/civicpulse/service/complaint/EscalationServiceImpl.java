@@ -31,7 +31,9 @@ public class EscalationServiceImpl {
             java.util.List.of(
                 com.civicpulse.model.enums.ComplaintStatus.RESOLVED,
                 com.civicpulse.model.enums.ComplaintStatus.CLOSED,
-                com.civicpulse.model.enums.ComplaintStatus.REJECTED));
+                com.civicpulse.model.enums.ComplaintStatus.REJECTED,
+                com.civicpulse.model.enums.ComplaintStatus.ESCALATED,
+                com.civicpulse.model.enums.ComplaintStatus.IN_PROGRESS));
         int count = 0;
 
         for (Complaint complaint : breached) {

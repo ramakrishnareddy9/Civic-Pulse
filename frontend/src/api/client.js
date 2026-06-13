@@ -11,7 +11,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 1000,
+  timeout: 10000,
 })
 
 /**
@@ -409,14 +409,8 @@ export const postFormData = async (url, formData, config = {}) => {
     })
     return response.data
   } catch (error) {
-    if (!import.meta.env.PROD) {
-      console.warn(`[Offline Demo Mode] Intercepted mock file upload: ${url}`)
-      try { window.__DEV_MOCK_USED__ = true; window.dispatchEvent(new Event('dev-mock-used')) } catch(e){}
-      return { 
-        success: true, 
-        url: 'https://images.unsplash.com/photo-1542060748-10c28b629f6f?auto=format&fit=crop&w=400&q=80' 
-      }
-    }
+    // postFormData is always a real write — never mask with a mock.
+    // A complaint submit error must surface to the user.
     throw error
   }
 }

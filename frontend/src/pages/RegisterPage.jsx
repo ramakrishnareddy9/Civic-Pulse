@@ -21,7 +21,6 @@ export function RegisterPage() {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    role: 'CITIZEN',
     password: '',
     confirmPassword: '',
     agreeToTerms: false,
@@ -46,7 +45,7 @@ export function RegisterPage() {
     else if (formData.fullName.trim().length < 3) newErrors.fullName = 'Name must be at least 3 characters'
     if (!formData.email) newErrors.email = ERRORS.REQUIRED_FIELD
     else if (!VALIDATION.EMAIL_REGEX.test(formData.email)) newErrors.email = ERRORS.INVALID_EMAIL
-    if (!formData.role) newErrors.role = ERRORS.REQUIRED_FIELD
+
     if (!formData.password) newErrors.password = ERRORS.REQUIRED_FIELD
     else {
       const failedChecks = PASSWORD_REQUIREMENTS.filter(r => !r.test(formData.password))
@@ -281,48 +280,15 @@ export function RegisterPage() {
               error={errors.email}
             />
 
-            {/* Role selector */}
-            <div>
-              <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--gov-text)' }}>
-                Account Type <span style={{ color: 'var(--gov-red)' }}>*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { value: 'CITIZEN', label: 'Citizen', icon: 'person', desc: 'Report & track issues' },
-                  { value: 'OFFICER', label: 'Gov. Officer', icon: 'badge', desc: 'Manage complaints' },
-                ].map(r => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, role: r.value }))
-                      if (errors.role) setErrors(prev => ({ ...prev, role: '' }))
-                    }}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
-                      formData.role === r.value ? 'border-blue-700 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span
-                        className="material-symbols-outlined text-base"
-                        style={{ color: formData.role === r.value ? 'var(--gov-blue)' : 'var(--gov-text-muted)', fontVariationSettings: "'FILL' 1" }}
-                      >
-                        {r.icon}
-                      </span>
-                      <span className="font-bold text-sm" style={{ color: formData.role === r.value ? 'var(--gov-blue)' : 'var(--gov-text)' }}>
-                        {r.label}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400">{r.desc}</p>
-                  </button>
-                ))}
-              </div>
-              {errors.role && (
-                <p className="mt-1.5 text-xs flex items-center gap-1" style={{ color: 'var(--gov-red)' }}>
-                  <span className="material-symbols-outlined text-sm">error</span>
-                  {errors.role}
+            {/* Account type info */}
+            <div className="p-4 rounded-xl border flex items-start gap-3" style={{ borderColor: 'var(--gov-border)', background: '#f0f4ff' }}>
+              <span className="material-symbols-outlined text-lg mt-0.5" style={{ color: 'var(--gov-blue)', fontVariationSettings: "'FILL' 1" }}>info</span>
+              <div>
+                <p className="text-sm font-semibold mb-0.5" style={{ color: 'var(--gov-navy)' }}>Citizen Registration</p>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--gov-text-muted)' }}>
+                  This form creates a <strong>Citizen</strong> account. Government Officer accounts are issued by the system administrator and cannot be self-registered.
                 </p>
-              )}
+              </div>
             </div>
 
             <InputField
